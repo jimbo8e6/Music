@@ -7,6 +7,11 @@
  * Both are handled here so callers never have to think about them.
  */
 
+import { cache } from "react";
+
+import { readCache, writeCache } from "@/lib/mbCache";
+
+
 // Overridable so the app can be pointed at a stub when testing; nothing but
 // tests should ever set it.
 const MB_BASE =
@@ -22,6 +27,22 @@ const USER_AGENT = `Wax/0.1.0 ( ${CONTACT} )`;
 
 /** MusicBrainz allows 1 req/s; 1100ms leaves room for clock jitter. */
 const MIN_INTERVAL_MS = 1100;
+
+/**
+ * How long an answer stays good. MusicBrainz data barely moves, and the point
+ * of a long window is that a throttled request is one we never had to make.
+ */
+const CACHE_MS = {
+  search: 12 * 60 * 60 * 1000,
+  lookup: 7 * 24 * 60 * 60 * 1000,
+} as const;
+
+/**
+ * Throttling is normal rather than exceptional here: the limit is per IP, and a
+ * shared host shares that IP with everyone else on it. So a 503 is worth
+ * waiting out rather than showing to whoever is reading the page.
+ */
+const RETRY_DELAYS_MS = [1200, 2600];
 
 let queue: Promise<unknown> = Promise.resolve();
 let lastRequestAt = 0;
@@ -47,11 +68,40 @@ export class MusicBrainzError extends Error {
   }
 }
 
-async function mbFetch<T>(path: string, params: Record<string, string>): Promise<T> {
+async function mbFetch<T>(
+  path: string,
+  params: Record<string, string>,
+  { cacheMs = CACHE_MS.search }: { cacheMs?: number } = {},
+): Promise<T> {
   const url = new URL(`${MB_BASE}${path}`);
   url.searchParams.set("fmt", "json");
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
+  const key = url.toString();
+
+  const cached = await readCache(key, cacheMs);
+  if (cached !== null) return cached as T;
+
+  const body = await mbFetchUncached<T>(url, path);
+  await writeCache(key, body);
+  return body;
+}
+
+async function mbFetchUncached<T>(url: URL, path: string): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await requestOnce<T>(url, path);
+    } catch (error) {
+      const throttled =
+        error instanceof MusicBrainzError && error.status === 503;
+      if (!throttled || attempt >= RETRY_DELAYS_MS.length) throw error;
+
+      await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+    }
+  }
+}
+
+function requestOnce<T>(url: URL, path: string): Promise<T> {
   return schedule(async () => {
     let res: Response;
     try {
@@ -516,9 +566,11 @@ export interface AlbumDetail extends AlbumSearchResult {
 
 /** Everything the album page needs up front, in a single request. */
 export async function lookupAlbum(mbid: string): Promise<AlbumDetail> {
-  const rg = await mbFetch<MBReleaseGroup>(`/release-group/${mbid}`, {
-    inc: "artist-credits+releases+genres",
-  });
+  const rg = await mbFetch<MBReleaseGroup>(
+    `/release-group/${mbid}`,
+    { inc: "artist-credits+releases+genres" },
+    { cacheMs: CACHE_MS.lookup },
+  );
 
   const base = toSearchResult(rg);
   const genres = (rg.genres ?? [])
@@ -566,6 +618,7 @@ export async function fetchTracklist(
     const release = await mbFetch<{ media?: MBMedium[] }>(
       `/release/${releaseId}`,
       { inc: "recordings" },
+      { cacheMs: CACHE_MS.lookup },
     );
 
     const media = release.media ?? [];
@@ -678,16 +731,40 @@ export interface ArtistDetail extends ArtistSearchResult {
   genres: string[];
 }
 
-/** Just the artist — the discography is a separate request, fetched after. */
+/**
+ * The artist, and their release groups in the same breath.
+ *
+ * Asking for the release groups as a sub-resource means one request where the
+ * page used to make two — and two requests are more than twice the cost, since
+ * the rate limiter has to space the second a full second behind the first.
+ *
+ * Memoised per request so the page header and the discography, which are
+ * rendered separately, share the one answer.
+ */
+const lookupArtistWithReleases = cache(
+  async (mbid: string): Promise<{ artist: ArtistDetail; releaseGroups: MBReleaseGroup[] | null }> => {
+    const artist = await mbFetch<MBArtist & { "release-groups"?: MBReleaseGroup[] }>(
+      `/artist/${mbid}`,
+      { inc: "genres+release-groups" },
+      { cacheMs: CACHE_MS.lookup },
+    );
+
+    const genres = (artist.genres ?? [])
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5)
+      .map((g) => g.name);
+
+    return {
+      artist: { ...toArtistResult(artist), genres },
+      // Absent rather than empty means the sub-resource was not returned, and
+      // the caller should fall back to browsing.
+      releaseGroups: artist["release-groups"] ?? null,
+    };
+  },
+);
+
 export async function lookupArtist(mbid: string): Promise<ArtistDetail> {
-  const artist = await mbFetch<MBArtist>(`/artist/${mbid}`, { inc: "genres" });
-
-  const genres = (artist.genres ?? [])
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 5)
-    .map((g) => g.name);
-
-  return { ...toArtistResult(artist), genres };
+  return (await lookupArtistWithReleases(mbid)).artist;
 }
 
 export interface Discography {
@@ -707,23 +784,39 @@ export async function getArtistReleaseGroups(
   mbid: string,
   { limit = 100, offset = 0 }: { limit?: number; offset?: number } = {},
 ): Promise<Discography> {
-  const data = await mbFetch<{
-    "release-groups"?: MBReleaseGroup[];
-    "release-group-count"?: number;
-  }>("/release-group", {
-    artist: mbid,
-    inc: "artist-credits",
-    limit: String(limit),
-    offset: String(offset),
-  });
+  let groups: MBReleaseGroup[];
+  let total: number;
 
-  const groups = data["release-groups"] ?? [];
+  // The artist lookup usually carries these already; only pay for a second
+  // request when it didn't, or when paging past what it returned.
+  const fromLookup = offset === 0 ? (await lookupArtistWithReleases(mbid)).releaseGroups : null;
+
+  if (fromLookup && fromLookup.length > 0) {
+    groups = fromLookup;
+    total = fromLookup.length;
+  } else {
+    const data = await mbFetch<{
+      "release-groups"?: MBReleaseGroup[];
+      "release-group-count"?: number;
+    }>(
+      "/release-group",
+      {
+        artist: mbid,
+        inc: "artist-credits",
+        limit: String(limit),
+        offset: String(offset),
+      },
+      { cacheMs: CACHE_MS.lookup },
+    );
+    groups = data["release-groups"] ?? [];
+    total = data["release-group-count"] ?? groups.length;
+  }
 
   return {
     releaseGroups: groups
       .map(toSearchResult)
       .sort((a, b) => (b.year ?? 0) - (a.year ?? 0)),
-    total: data["release-group-count"] ?? groups.length,
+    total,
   };
 }
 

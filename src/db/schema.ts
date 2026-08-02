@@ -104,6 +104,21 @@ export const entries = sqliteTable("entries", {
   index("entries_user_rating_idx").on(t.userId, t.rating),
 ]);
 
+/**
+ * Raw MusicBrainz responses, keyed by request URL.
+ *
+ * Next's own fetch cache is per-deployment and gets discarded; on a serverless
+ * host every cold start begins with nothing, and the app pays the upstream cost
+ * again. MusicBrainz allows one request per second per IP — and on a shared
+ * host that IP is shared with everyone else on it — so the cheapest request is
+ * the one never made.
+ */
+export const mbCache = sqliteTable("mb_cache", {
+  url: text("url").primaryKey(),
+  body: text("body").notNull(),
+  fetchedAt: integer("fetched_at", { mode: "timestamp" }).notNull(),
+});
+
 /** Albums the user wants to hear but hasn't logged yet. */
 export const watchlist = sqliteTable("watchlist", {
   id: integer("id").primaryKey({ autoIncrement: true }),

@@ -102,11 +102,21 @@ database stays small and only holds records you've actually touched.
 **Ratings are integers.** Half stars are stored as 1–10 rather than a float, so
 sorting and averaging stay exact. `formatStars` renders them back as `4.5`.
 
-**The API client self-throttles.** MusicBrainz allows one request per second per
-IP and blocks clients without a descriptive `User-Agent`. `src/lib/musicbrainz.ts`
-serialises every call through a queue with a 1.1s gap, so callers never have to
-think about it. This does mean search feels slower than a commercial API — that
-is the rate limit, not the app.
+**The API client self-throttles, caches and retries.** MusicBrainz allows one
+request per second per IP and blocks clients without a descriptive
+`User-Agent`. `src/lib/musicbrainz.ts` serialises every call through a queue
+with a 1.1s gap.
+
+That gap is per process, which is not enough on a serverless host: instances
+start cold with an empty queue, several run at once, and the egress IP is shared
+with every other tenant on it — so the per-IP budget is shared too. Two things
+make up the difference. Every response is cached in the `mb_cache` table, which
+survives cold starts and is shared across instances, so a repeated question
+costs nothing. And a 503 is retried with backoff rather than surfaced, because
+under a shared IP throttling is ordinary rather than exceptional.
+
+Search still feels slower than a commercial API on a first, uncached query —
+that is the rate limit, not the app.
 
 **Single-user, auth-ready.** There is no login. `getCurrentUser()` returns the
 seeded `local` account, creating it on first run. Every user-owned row already
