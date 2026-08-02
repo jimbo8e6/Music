@@ -3,8 +3,10 @@
 Letterboxd, but for albums. Log what you listen to, rate it out of five stars,
 write about it, and keep the whole thing in one dark, artwork-first grid.
 
-- **Search albums** by title, or **search artists** and browse their whole
-  discography — two separate searches, because they are two different questions.
+- **Search albums** by title — studio albums by default, with filters for EPs,
+  live records, compilations or everything.
+- **Search artists** and browse their whole discography — a separate search,
+  because it is a different question.
 - Artist pages group releases into albums, EPs, live records and compilations.
 - **Artwork** from the Cover Art Archive at up to 1200px, with a generated
   colour tile when an album has no cover uploaded.
@@ -70,6 +72,12 @@ drizzle/               generated migrations — committed, applied on boot
   lib/queries.ts       reads
   lib/actions.ts       writes (server actions)
 ```
+
+**Album search shows studio albums by default.** A record's derivatives
+outnumber it: reissues, best-ofs, live documents and soundtracks all match the
+same words. The filter is applied in the query where MusicBrainz supports it and
+against the results either way, so an index that rejects the absent-field clause
+degrades to the same answer rather than an error.
 
 **Album search and artist search are separate on purpose.** A one-word artist
 query matches every record they made equally well, so MusicBrainz has nothing to

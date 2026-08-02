@@ -114,7 +114,11 @@ function escapePhrase(input: string): string {
  * So: every term has to appear in the title or the artist, and an exact match on
  * either is boosted hard enough to reach the top.
  */
-function buildSearchQuery(input: string, types: string[]): string {
+function buildSearchQuery(
+  input: string,
+  spec: FilterSpec,
+  { excludeSecondary = true }: { excludeSecondary?: boolean } = {},
+): string {
   const terms = input.split(/\s+/).filter(Boolean);
   const phrase = escapePhrase(input);
 
@@ -131,10 +135,21 @@ function buildSearchQuery(input: string, types: string[]): string {
     `(${perTerm})`,
   ];
 
-  const search = `(${clauses.join(" OR ")})`;
-  if (!types.length) return search;
+  const parts = [`(${clauses.join(" OR ")})`];
 
-  return `${search} AND primarytype:(${types.join(" OR ")})`;
+  if (spec.types.length) {
+    parts.push(`primarytype:(${spec.types.join(" OR ")})`);
+  }
+
+  if (spec.secondary === "none") {
+    // Lucene's "this field is absent". Some deployments reject it, hence the
+    // caller's ability to drop it and fall back to filtering the results.
+    if (excludeSecondary) parts.push("-secondarytype:[* TO *]");
+  } else if (spec.secondary !== "any") {
+    parts.push(`secondarytype:${escapeLucene(spec.secondary.toLowerCase())}`);
+  }
+
+  return parts.join(" AND ");
 }
 
 /**
@@ -351,10 +366,54 @@ function toSearchResult(rg: MBReleaseGroup): AlbumSearchResult {
   };
 }
 
+/**
+ * What counts as a result.
+ *
+ * "studio" is the default because it is what people mean by an album: a record
+ * the artist made, not the live document, the best-of or the soundtrack. Those
+ * are all still reachable, just not mixed into the answer by default.
+ */
+export type AlbumFilter = "studio" | "eps" | "live" | "compilations" | "all";
+
+interface FilterSpec {
+  label: string;
+  /** MusicBrainz primary types; empty means no restriction. */
+  types: string[];
+  /** Required secondary type, "none" for records that have no secondary type. */
+  secondary: "none" | "any" | string;
+}
+
+export const ALBUM_FILTERS: Record<AlbumFilter, FilterSpec> = {
+  studio: { label: "Studio albums", types: ["album"], secondary: "none" },
+  eps: { label: "EPs", types: ["ep"], secondary: "any" },
+  live: { label: "Live", types: ["album", "ep"], secondary: "Live" },
+  compilations: {
+    label: "Compilations",
+    types: ["album", "ep"],
+    secondary: "Compilation",
+  },
+  all: { label: "Everything", types: [], secondary: "any" },
+};
+
+export function isAlbumFilter(value: unknown): value is AlbumFilter {
+  return typeof value === "string" && value in ALBUM_FILTERS;
+}
+
+/** Does this result belong in the filter, judged on the data itself? */
+function matchesFilter(result: AlbumSearchResult, spec: FilterSpec): boolean {
+  if (spec.types.length) {
+    const primary = (result.primaryType ?? "").toLowerCase();
+    if (!spec.types.includes(primary)) return false;
+  }
+
+  if (spec.secondary === "none") return result.secondaryTypes.length === 0;
+  if (spec.secondary === "any") return true;
+  return result.secondaryTypes.includes(spec.secondary);
+}
+
 export interface SearchOptions {
   limit?: number;
-  /** Restrict to these MusicBrainz primary types. Empty array means no filter. */
-  types?: string[];
+  filter?: AlbumFilter;
 }
 
 /**
@@ -381,32 +440,47 @@ async function fetchReleaseGroups(
  */
 export async function searchAlbums(
   query: string,
-  { limit = 24, types = ["album", "ep"] }: SearchOptions = {},
+  { limit = 24, filter = "studio" }: SearchOptions = {},
 ): Promise<AlbumSearchResult[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];
+
+  const spec = ALBUM_FILTERS[filter];
 
   // Ask for more than we show, since re-ranking can only reorder what it is
   // given — but not much more. MusicBrainz slows down noticeably on large
   // result sets, and the album you meant is never 80 places down.
   const fetchLimit = Math.min(60, Math.max(limit * 2, 40));
 
-  const groups = await fetchReleaseGroups(
-    buildSearchQuery(trimmed, types),
-    fetchLimit,
-  );
+  let groups: MBReleaseGroup[];
+  try {
+    groups = await fetchReleaseGroups(
+      buildSearchQuery(trimmed, spec),
+      fetchLimit,
+    );
+  } catch (error) {
+    // The absent-field clause is the only part that can be rejected outright.
+    // Drop it and let the local filter do the work instead of failing the page.
+    if (!(error instanceof MusicBrainzError && error.status === 400)) throw error;
+    groups = await fetchReleaseGroups(
+      buildSearchQuery(trimmed, spec, { excludeSecondary: false }),
+      fetchLimit,
+    );
+  }
 
   const ranked = groups.map((rg) => {
     const result = toSearchResult(rg);
     return { result, relevance: relevanceOf(result, trimmed) };
   });
 
+  const kept = ranked.filter(({ result }) => matchesFilter(result, spec));
+
   // MusicBrainz happily returns the same album as several release-groups when
   // reissues were modelled separately; collapse on title+artist, keep the best.
   // Same title, same artist, equal relevance means the same record twice — and
   // then the one that came out first is the album, the other is the reissue.
   const seen = new Map<string, (typeof ranked)[number]>();
-  for (const candidate of ranked) {
+  for (const candidate of kept) {
     const key = `${normalise(candidate.result.title)}::${normalise(candidate.result.artistName)}`;
     const existing = seen.get(key);
     if (!existing || betterOf(candidate, existing)) seen.set(key, candidate);

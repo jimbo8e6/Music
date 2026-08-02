@@ -10,7 +10,14 @@ import { EmptyState } from "@/components/EmptyState";
 import { SearchBox } from "@/components/SearchBox";
 import { db, getCurrentUser, schema } from "@/db";
 import { coverArtUrlForMbid } from "@/lib/coverart";
-import { MusicBrainzError, searchAlbums, searchArtists } from "@/lib/musicbrainz";
+import {
+  ALBUM_FILTERS,
+  MusicBrainzError,
+  isAlbumFilter,
+  searchAlbums,
+  searchArtists,
+  type AlbumFilter,
+} from "@/lib/musicbrainz";
 
 export const metadata = { title: "Search" };
 export const dynamic = "force-dynamic";
@@ -22,7 +29,7 @@ const MODES: { key: SearchMode; label: string; placeholder: string; hint: string
     key: "albums",
     label: "Albums",
     placeholder: "Album title…",
-    hint: "Searching titles. Add the artist if the name is a common one — “meds placebo”.",
+    hint: "Studio albums by default. Widen it with the filters if you want live records, compilations or EPs.",
   },
   {
     key: "artists",
@@ -35,11 +42,12 @@ const MODES: { key: SearchMode; label: string; placeholder: string; hint: string
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; type?: string }>;
+  searchParams: Promise<{ q?: string; type?: string; filter?: string }>;
 }) {
-  const { q, type } = await searchParams;
+  const { q, type, filter } = await searchParams;
   const query = q?.trim() ?? "";
   const mode: SearchMode = type === "artists" ? "artists" : "albums";
+  const albumFilter: AlbumFilter = isAlbumFilter(filter) ? filter : "studio";
   const config = MODES.find((m) => m.key === mode)!;
 
   return (
@@ -79,21 +87,47 @@ export default async function SearchPage({
           placeholder={config.placeholder}
           variant="prominent"
           mode={mode}
+          filter={albumFilter}
         />
         <p className="text-mist-400 text-center text-xs">{config.hint}</p>
       </div>
+
+      {mode === "albums" && (
+        <div className="flex flex-wrap justify-center gap-2">
+          {(Object.keys(ALBUM_FILTERS) as AlbumFilter[]).map((key) => {
+            const active = key === albumFilter;
+            const params = new URLSearchParams();
+            if (query) params.set("q", query);
+            if (key !== "studio") params.set("filter", key);
+            return (
+              <Link
+                key={key}
+                href={`/search?${params}`}
+                aria-current={active ? "true" : undefined}
+                className={
+                  active
+                    ? "border-accent-500 text-accent-400 rounded-full border px-3 py-1 text-xs font-medium"
+                    : "border-ink-700 text-mist-400 hover:border-ink-600 hover:text-mist-100 rounded-full border px-3 py-1 text-xs transition-colors"
+                }
+              >
+                {ALBUM_FILTERS[key].label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
 
       {query ? (
         // Keyed on both, so switching tab or query returns to the skeleton
         // rather than leaving the previous answer on screen.
         <Suspense
-          key={`${mode}:${query}`}
+          key={`${mode}:${albumFilter}:${query}`}
           fallback={<SearchingNotice query={query} mode={mode} />}
         >
           {mode === "artists" ? (
             <ArtistResults query={query} />
           ) : (
-            <AlbumResults query={query} />
+            <AlbumResults query={query} filter={albumFilter} />
           )}
         </Suspense>
       ) : null}
@@ -174,17 +208,32 @@ async function ArtistResults({ query }: { query: string }) {
   }
 }
 
-async function AlbumResults({ query }: { query: string }) {
+async function AlbumResults({
+  query,
+  filter,
+}: {
+  query: string;
+  filter: AlbumFilter;
+}) {
   try {
-    const results = await searchAlbums(query);
+    const results = await searchAlbums(query, { filter });
 
     if (results.length === 0) {
+      const studio = filter === "studio";
       return (
         <EmptyState
-          title={`Nothing found for “${query}”`}
-          body="MusicBrainz indexes by exact-ish spelling. Try dropping punctuation and subtitles — or look the artist up and browse their releases."
-          actionHref={`/search?q=${encodeURIComponent(query)}&type=artists`}
-          actionLabel="Search artists instead"
+          title={`No ${ALBUM_FILTERS[filter].label.toLowerCase()} found for “${query}”`}
+          body={
+            studio
+              ? "Only studio albums are shown by default. It may be a live record, an EP or a compilation — try widening the filter above."
+              : "MusicBrainz indexes by exact-ish spelling. Try dropping punctuation and subtitles, or look the artist up and browse their releases."
+          }
+          actionHref={
+            studio
+              ? `/search?q=${encodeURIComponent(query)}&filter=all`
+              : `/search?q=${encodeURIComponent(query)}&type=artists`
+          }
+          actionLabel={studio ? "Search everything" : "Search artists instead"}
         />
       );
     }
@@ -197,7 +246,7 @@ async function AlbumResults({ query }: { query: string }) {
       <section className="space-y-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <p className="text-mist-400 text-xs tracking-wider uppercase">
-            {results.length} result{results.length === 1 ? "" : "s"}
+            {results.length} {ALBUM_FILTERS[filter].label.toLowerCase()}
           </p>
           <Link
             href={`/search?q=${encodeURIComponent(query)}&type=artists`}
