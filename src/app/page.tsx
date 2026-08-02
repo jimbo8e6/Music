@@ -2,8 +2,9 @@ import { Suspense } from "react";
 import Link from "next/link";
 
 import { AlbumCard } from "@/components/AlbumCard";
+import { fetchAppleNewReleases, type AppleRelease } from "@/lib/applemusic";
 import { coverArtUrlForMbid } from "@/lib/coverart";
-import { fetchNewReleases } from "@/lib/musicbrainz";
+import { searchAlbums } from "@/lib/musicbrainz";
 import { getHomeRecommendations } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -23,31 +24,47 @@ export default function HomePage() {
 }
 
 async function NewReleasesSection() {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 60);
-  const fromDate = cutoff.toISOString().slice(0, 10);
+  const appleReleases = await fetchAppleNewReleases({ limit: 8 });
+  if (!appleReleases.length) return null;
 
-  const releases = await fetchNewReleases(fromDate, { limit: 12 });
-  if (!releases.length) return null;
+  // Resolve a MusicBrainz ID for each Apple album so we can link into the app.
+  // These searches go through the MB cache (12h TTL), so they're instant on
+  // warm cache — the 1.1s rate limit only applies on a cold start.
+  const releases = await Promise.all(appleReleases.map(resolveAppleRelease));
 
   return (
     <section className="space-y-4">
       <SectionHeading title="New Releases" />
       <ScrollRow>
-        {releases.map(r => (
-          <CardSlot key={r.mbid}>
-            <AlbumCard
-              href={`/album/${r.mbid}`}
-              title={r.title}
-              artist={r.artistName}
-              year={r.year}
-              coverUrl={coverArtUrlForMbid(r.mbid, 500)}
-            />
-          </CardSlot>
-        ))}
+        {releases.map(r => {
+          const href = r.mbid
+            ? `/album/${r.mbid}`
+            : `/search?q=${encodeURIComponent(`${r.name} ${r.artistName}`)}`;
+          return (
+            <CardSlot key={r.id}>
+              <AlbumCard
+                href={href}
+                title={r.name}
+                artist={r.artistName}
+                year={r.releaseDate ? new Date(r.releaseDate).getFullYear() : null}
+                coverUrl={r.artworkUrl}
+              />
+            </CardSlot>
+          );
+        })}
       </ScrollRow>
     </section>
   );
+}
+
+/** Looks up the MusicBrainz release-group ID for an Apple Music album. */
+async function resolveAppleRelease(r: AppleRelease): Promise<AppleRelease & { mbid: string | null }> {
+  try {
+    const results = await searchAlbums(`${r.name} ${r.artistName}`, { limit: 1, filter: "all" });
+    return { ...r, mbid: results[0]?.mbid ?? null };
+  } catch {
+    return { ...r, mbid: null };
+  }
 }
 
 async function RecommendationsSection() {
