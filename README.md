@@ -36,6 +36,14 @@ creates the account and exits cleanly.
 
 ## Configuration
 
+Copy `.env.example` to `.env.local` and edit it. Next.js loads `.env.local`
+automatically in both dev and production, and it's gitignored, so your details
+stay out of the repo.
+
+```bash
+cp .env.example .env.local
+```
+
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `DATABASE_URL` | `./wax.db` | SQLite file path |
