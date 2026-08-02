@@ -3,7 +3,9 @@
 Letterboxd, but for albums. Log what you listen to, rate it out of five stars,
 write about it, and keep the whole thing in one dark, artwork-first grid.
 
-- **Search** albums via MusicBrainz — no API key, no account.
+- **Search albums** by title, or **search artists** and browse their whole
+  discography — two separate searches, because they are two different questions.
+- Artist pages group releases into albums, EPs, live records and compilations.
 - **Artwork** from the Cover Art Archive at up to 1200px, with a generated
   colour tile when an album has no cover uploaded.
 - **Rate** in half stars, 0.5 to 5.
@@ -57,6 +59,8 @@ cp .env.example .env.local
 ```
 src/
   app/                 routes (App Router, all server components bar the forms)
+  app/search           tabbed album / artist search
+  app/artist/[id]      artist page and discography
   components/          AlbumCard, Stars, StarInput, ReviewForm, …
   db/schema.ts         users · albums · entries · watchlist
   db/index.ts          connection + startup migration + getCurrentUser()
@@ -66,6 +70,14 @@ drizzle/               generated migrations — committed, applied on boot
   lib/queries.ts       reads
   lib/actions.ts       writes (server actions)
 ```
+
+**Album search and artist search are separate on purpose.** A one-word artist
+query matches every record they made equally well, so MusicBrainz has nothing to
+rank on and returns an arbitrary slice of the catalogue — no amount of
+re-ranking recovers an album that never came back. Artist pages sidestep it
+entirely by browsing the discography by artist id, which returns the catalogue
+itself rather than a scored sample. Album search stays a single request and only
+has to answer "which record is this".
 
 **Albums are cached, not mirrored.** Nothing is stored until you open an album
 page; `getOrFetchAlbum` reads the local row or fetches and inserts it. The

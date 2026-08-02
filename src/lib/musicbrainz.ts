@@ -7,7 +7,10 @@
  * Both are handled here so callers never have to think about them.
  */
 
-const MB_BASE = "https://musicbrainz.org/ws/2";
+// Overridable so the app can be pointed at a stub when testing; nothing but
+// tests should ever set it.
+const MB_BASE =
+  process.env.MUSICBRAINZ_BASE_URL ?? "https://musicbrainz.org/ws/2";
 
 // MusicBrainz accepts a URL or an email here — it only needs a way to reach
 // whoever is running the client. The repo URL is a valid contact on its own, so
@@ -370,43 +373,12 @@ async function fetchReleaseGroups(
 }
 
 /**
- * The artist this query names, if it names one and nothing else.
+ * Album search, for when you know what record you want.
  *
- * "placebo", "placebo placebo" and "the who" are all just a band's name; every
- * record they made matches the text equally well, so the order MusicBrainz
- * returns them in carries no information and the album you wanted may not come
- * back at all. Recognising that lets us go and ask for the discography instead.
+ * Looking up an artist's catalogue is a different question with a different
+ * answer — see `searchArtists` and `getArtistReleaseGroups` — so this stays a
+ * single request and does not try to guess which one you meant.
  */
-function artistNamedByQuery(
-  query: string,
-  groups: MBReleaseGroup[],
-): { mbid: string; name: string } | null {
-  const queryTokens = new Set(tokensOf(normalise(query)));
-  if (queryTokens.size === 0) return null;
-
-  let best: { mbid: string; name: string; score: number } | null = null;
-
-  for (const rg of groups) {
-    const credit = rg["artist-credit"]?.[0]?.artist;
-    if (!credit?.id || !credit.name) continue;
-
-    // Everything typed has to be part of the artist's name — otherwise the
-    // query says something about the title too, and the normal search stands.
-    const artistTokens = new Set(tokensOf(normalise(credit.name)));
-    const namesOnlyArtist = [...queryTokens].every((token) =>
-      artistTokens.has(token),
-    );
-    if (!namesOnlyArtist) continue;
-
-    const score = rg.score ?? 0;
-    if (!best || score > best.score) {
-      best = { mbid: credit.id, name: credit.name, score };
-    }
-  }
-
-  return best ? { mbid: best.mbid, name: best.name } : null;
-}
-
 export async function searchAlbums(
   query: string,
   { limit = 24, types = ["album", "ep"] }: SearchOptions = {},
@@ -419,25 +391,10 @@ export async function searchAlbums(
   // result sets, and the album you meant is never 80 places down.
   const fetchLimit = Math.min(60, Math.max(limit * 2, 40));
 
-  let groups = await fetchReleaseGroups(
+  const groups = await fetchReleaseGroups(
     buildSearchQuery(trimmed, types),
     fetchLimit,
   );
-
-  // If the query was only an artist's name, the first pass was a scored sample
-  // of a catalogue where everything scores alike. Ask for the catalogue itself.
-  const artist = artistNamedByQuery(trimmed, groups);
-  if (artist) {
-    const typeFilter = types.length
-      ? ` AND primarytype:(${types.join(" OR ")})`
-      : "";
-    const discography = await fetchReleaseGroups(
-      `arid:"${artist.mbid}"${typeFilter}`,
-      100,
-    ).catch(() => [] as MBReleaseGroup[]);
-
-    groups = [...groups, ...discography];
-  }
 
   const ranked = groups.map((rg) => {
     const result = toSearchResult(rg);
@@ -518,4 +475,148 @@ export async function fetchTrackCount(releaseId: string): Promise<number | null>
   } catch {
     return null;
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Artists                                                                    */
+/* -------------------------------------------------------------------------- */
+
+export interface ArtistSearchResult {
+  mbid: string;
+  name: string;
+  /** MusicBrainz's own tie-breaker, e.g. "British rock band" — often the only
+   *  way to tell two identically named bands apart. */
+  disambiguation: string | null;
+  /** "Group", "Person", "Orchestra", … */
+  type: string | null;
+  country: string | null;
+  beganYear: number | null;
+  endedYear: number | null;
+  score: number;
+}
+
+interface MBArtist {
+  id: string;
+  name: string;
+  disambiguation?: string;
+  type?: string | null;
+  country?: string | null;
+  "life-span"?: { begin?: string; end?: string; ended?: boolean };
+  genres?: { name: string; count: number }[];
+  score?: number;
+}
+
+function toArtistResult(artist: MBArtist): ArtistSearchResult {
+  return {
+    mbid: artist.id,
+    name: artist.name,
+    disambiguation: artist.disambiguation?.trim() || null,
+    type: artist.type ?? null,
+    country: artist.country ?? null,
+    beganYear: yearOf(artist["life-span"]?.begin),
+    endedYear: yearOf(artist["life-span"]?.end),
+    score: artist.score ?? 0,
+  };
+}
+
+/**
+ * Artist search. The artist index defaults to the name field, but shares the
+ * OR-by-default problem, so every word is required and the whole phrase is
+ * boosted. Aliases are matched too — plenty of bands are looked up by a name
+ * MusicBrainz files them under differently.
+ */
+export async function searchArtists(
+  query: string,
+  { limit = 25 }: { limit?: number } = {},
+): Promise<ArtistSearchResult[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const phrase = escapePhrase(trimmed);
+  const perTerm = trimmed
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((term) => `artist:${escapeLucene(term)}`)
+    .join(" AND ");
+
+  const data = await mbFetch<{ artists?: MBArtist[] }>("/artist", {
+    query: `(artist:"${phrase}"^10 OR alias:"${phrase}"^6 OR (${perTerm}))`,
+    limit: String(limit),
+  });
+
+  const wanted = normalise(trimmed);
+
+  return (data.artists ?? [])
+    .map(toArtistResult)
+    .sort((a, b) => {
+      // An exact name match is what you meant, whatever the text score says.
+      const exact = Number(normalise(b.name) === wanted) - Number(normalise(a.name) === wanted);
+      return exact !== 0 ? exact : b.score - a.score;
+    });
+}
+
+export interface ArtistDetail extends ArtistSearchResult {
+  genres: string[];
+}
+
+/** Just the artist — the discography is a separate request, fetched after. */
+export async function lookupArtist(mbid: string): Promise<ArtistDetail> {
+  const artist = await mbFetch<MBArtist>(`/artist/${mbid}`, { inc: "genres" });
+
+  const genres = (artist.genres ?? [])
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5)
+    .map((g) => g.name);
+
+  return { ...toArtistResult(artist), genres };
+}
+
+export interface Discography {
+  releaseGroups: AlbumSearchResult[];
+  /** How many MusicBrainz holds, which may exceed what one request returns. */
+  total: number;
+}
+
+/**
+ * Everything an artist released.
+ *
+ * This is a browse request, not a search: it returns the catalogue itself in
+ * full rather than a relevance-scored sample, which is exactly what ranking a
+ * one-word artist query could never give us.
+ */
+export async function getArtistReleaseGroups(
+  mbid: string,
+  { limit = 100, offset = 0 }: { limit?: number; offset?: number } = {},
+): Promise<Discography> {
+  const data = await mbFetch<{
+    "release-groups"?: MBReleaseGroup[];
+    "release-group-count"?: number;
+  }>("/release-group", {
+    artist: mbid,
+    inc: "artist-credits",
+    limit: String(limit),
+    offset: String(offset),
+  });
+
+  const groups = data["release-groups"] ?? [];
+
+  return {
+    releaseGroups: groups
+      .map(toSearchResult)
+      .sort((a, b) => (b.year ?? 0) - (a.year ?? 0)),
+    total: data["release-group-count"] ?? groups.length,
+  };
+}
+
+/** The sections an artist page is split into, in the order they're shown. */
+export type ReleaseSection = "Albums" | "EPs" | "Live" | "Compilations" | "Other";
+
+export function sectionOf(release: AlbumSearchResult): ReleaseSection {
+  const secondary = release.secondaryTypes;
+  if (secondary.includes("Live")) return "Live";
+  if (secondary.includes("Compilation")) return "Compilations";
+  if (secondary.length > 0) return "Other";
+  if (release.primaryType === "EP") return "EPs";
+  if (release.primaryType === "Album") return "Albums";
+  return "Other";
 }

@@ -15,11 +15,14 @@ export function SearchBox({
   autoFocus = false,
   placeholder = "Search albums…",
   variant = "inline",
+  mode = "albums",
 }: {
   defaultValue?: string;
   autoFocus?: boolean;
   placeholder?: string;
   variant?: "inline" | "prominent";
+  /** Which tab the search runs in; carried through so results stay in it. */
+  mode?: "albums" | "artists";
 }) {
   const router = useRouter();
   const [value, setValue] = useState(defaultValue);
@@ -30,8 +33,9 @@ export function SearchBox({
     const query = value.trim();
     if (!query) return;
 
+    const suffix = mode === "artists" ? "&type=artists" : "";
     startTransition(() => {
-      router.push(`/search?q=${encodeURIComponent(query)}`);
+      router.push(`/search?q=${encodeURIComponent(query)}${suffix}`);
     });
   }
 

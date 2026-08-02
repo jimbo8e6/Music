@@ -82,7 +82,16 @@ export default async function AlbumPage({
         <div className="space-y-6">
           <header className="space-y-2">
             <h1 className="text-3xl leading-tight font-bold">{album.title}</h1>
-            <p className="text-mist-300 text-lg">{album.artistName}</p>
+            {album.artistMbid ? (
+              <Link
+                href={`/artist/${album.artistMbid}`}
+                className="text-mist-300 hover:text-accent-400 inline-block text-lg transition-colors"
+              >
+                {album.artistName}
+              </Link>
+            ) : (
+              <p className="text-mist-300 text-lg">{album.artistName}</p>
+            )}
             {meta.length > 0 && (
               <p className="text-mist-400 text-sm">
                 {meta.join(" · ")}
