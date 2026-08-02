@@ -4,7 +4,7 @@ import { and, avg, count, desc, eq, isNotNull, sql } from "drizzle-orm";
 
 import { db, getCurrentUser, schema } from "@/db";
 import type { Album, Entry } from "@/db/schema";
-import { fetchTrackCount, lookupAlbum } from "@/lib/musicbrainz";
+import { fetchTracklist, lookupAlbum, type Track } from "@/lib/musicbrainz";
 
 export interface EntryWithAlbum {
   entry: Entry;
@@ -60,23 +60,45 @@ export const getOrFetchAlbum = cache(async (id: string): Promise<Album | null> =
  * delays the entire page by more than a second. The album page renders first
  * and streams this in behind it.
  */
-export async function getTrackCount(id: string): Promise<number | null> {
+export interface AlbumTracklist {
+  tracks: Track[];
+  count: number | null;
+}
+
+export async function getTracklist(id: string): Promise<AlbumTracklist> {
   const album = await getAlbum(id);
-  if (!album) return null;
-  if (album.trackCount !== null) return album.trackCount;
+  if (!album) return { tracks: [], count: null };
 
-  // Already asked and came back empty — don't keep asking on every view.
-  if (album.trackCountCheckedAt) return null;
-  if (!album.primaryReleaseId) return null;
+  // A stored array — even an empty one — means the question has been asked.
+  // Null means it never has: either the album predates the tracklist being
+  // kept at all, or nothing has looked yet.
+  if (album.tracks !== null) {
+    return { tracks: album.tracks, count: album.trackCount };
+  }
 
-  const count = await fetchTrackCount(album.primaryReleaseId);
+  if (!album.primaryReleaseId) return { tracks: [], count: album.trackCount };
+
+  const fetched = await fetchTracklist(album.primaryReleaseId);
 
   await db
     .update(albums)
-    .set({ trackCount: count, trackCountCheckedAt: new Date() })
+    .set({
+      trackCount: fetched?.count ?? album.trackCount ?? null,
+      // Store [] rather than null on a miss, so this is asked once and no more.
+      tracks: fetched?.tracks ?? [],
+      trackCountCheckedAt: new Date(),
+    })
     .where(eq(albums.id, id));
 
-  return count;
+  return {
+    tracks: fetched?.tracks ?? [],
+    count: fetched?.count ?? album.trackCount ?? null,
+  };
+}
+
+/** Just the number, for the album page's metadata line. */
+export async function getTrackCount(id: string): Promise<number | null> {
+  return (await getTracklist(id)).count;
 }
 
 export async function getAlbum(id: string): Promise<Album | undefined> {

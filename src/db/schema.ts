@@ -50,6 +50,10 @@ export const albums = sqliteTable("albums", {
   primaryReleaseId: text("primary_release_id"),
   /** Set once the tracklist has been looked up, so a blank isn't retried forever. */
   trackCountCheckedAt: integer("track_count_checked_at", { mode: "timestamp" }),
+  /** The tracklist itself, cached from the same request as the count. */
+  tracks: text("tracks", { mode: "json" }).$type<
+    { position: number; title: string; lengthMs: number | null; medium: number }[]
+  >(),
   /** Cover Art Archive front image, or null when no art exists upstream. */
   coverArtUrl: text("cover_art_url"),
   /** Null until we have asked CAA at least once; prevents re-asking forever. */

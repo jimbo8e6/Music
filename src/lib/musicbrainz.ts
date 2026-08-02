@@ -529,23 +529,68 @@ export async function lookupAlbum(mbid: string): Promise<AlbumDetail> {
   return { ...base, genres, primaryReleaseId: rg.releases?.[0]?.id ?? null };
 }
 
+export interface Track {
+  /** Position within its medium, as printed on the sleeve. */
+  position: number;
+  title: string;
+  lengthMs: number | null;
+  /** 1-based disc number; only worth showing when a release has several. */
+  medium: number;
+}
+
+export interface Tracklist {
+  tracks: Track[];
+  count: number;
+  mediumCount: number;
+}
+
+interface MBMedium {
+  position?: number;
+  "track-count"?: number;
+  tracks?: { position?: number; number?: string; title?: string; length?: number }[];
+}
+
 /**
- * Total tracks across every medium of a release.
+ * The tracklist of a release, and its total length.
  *
- * Best-effort: a missing count is not worth failing the page over, so this
- * returns null rather than throwing.
+ * Release groups carry no tracklist, so this asks a specific release. It is the
+ * same request the track count needs, so the titles come along for free.
+ *
+ * Best-effort: a release MusicBrainz has no tracklist for is not worth failing
+ * a page over, so this returns null rather than throwing.
  */
-export async function fetchTrackCount(releaseId: string): Promise<number | null> {
+export async function fetchTracklist(
+  releaseId: string,
+): Promise<Tracklist | null> {
   try {
-    const release = await mbFetch<{ media?: { "track-count"?: number }[] }>(
+    const release = await mbFetch<{ media?: MBMedium[] }>(
       `/release/${releaseId}`,
       { inc: "recordings" },
     );
-    const total = (release.media ?? []).reduce(
-      (sum, medium) => sum + (medium["track-count"] ?? 0),
-      0,
-    );
-    return total || null;
+
+    const media = release.media ?? [];
+    const tracks: Track[] = [];
+
+    media.forEach((medium, index) => {
+      const mediumNumber = medium.position ?? index + 1;
+      for (const track of medium.tracks ?? []) {
+        if (!track.title) continue;
+        tracks.push({
+          position: track.position ?? Number(track.number) ?? tracks.length + 1,
+          title: track.title,
+          lengthMs: typeof track.length === "number" ? track.length : null,
+          medium: mediumNumber,
+        });
+      }
+    });
+
+    const count =
+      media.reduce((sum, medium) => sum + (medium["track-count"] ?? 0), 0) ||
+      tracks.length;
+
+    if (!count) return null;
+
+    return { tracks, count, mediumCount: media.length || 1 };
   } catch {
     return null;
   }

@@ -10,6 +10,8 @@ write about it, and keep the whole thing in one dark, artwork-first grid.
 - Artist pages group releases into albums, EPs, live records and compilations.
 - **Artwork** from the Cover Art Archive at up to 1200px, with a generated
   colour tile when an album has no cover uploaded.
+- **Turn the sleeve over** on an album page for the back cover, or the
+  tracklist when nobody has uploaded one.
 - **Rate** in half stars, 0.5 to 5.
 - **Review** with an optional headline, a listen date, and a favourite flag.
 - **Library** sortable by rating, artist, title or release year.
@@ -86,6 +88,12 @@ re-ranking recovers an album that never came back. Artist pages sidestep it
 entirely by browsing the discography by artist id, which returns the catalogue
 itself rather than a scored sample. Album search stays a single request and only
 has to answer "which record is this".
+
+**Tracklists load on demand.** Back covers hang off a specific release rather
+than the release group, which only ever exposes a front, so both the back image
+and the tracklist need the release recorded when the album was cached. Neither
+is fetched until a sleeve is actually turned over, and the tracklist is stored
+on the album row afterwards.
 
 **Albums are cached, not mirrored.** Nothing is stored until you open an album
 page; `getOrFetchAlbum` reads the local row or fetches and inserts it. The

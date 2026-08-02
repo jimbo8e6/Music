@@ -29,6 +29,22 @@ export function coverArtUrl(
   return `${CAA_BASE}/release-group/${mbid}/front-${size}`;
 }
 
+/**
+ * The back of the sleeve, if anyone has uploaded one.
+ *
+ * Back covers hang off a specific release rather than the release group — the
+ * group only ever exposes a front — so this needs the release we recorded when
+ * the album was cached. Plenty of releases have no back image at all; callers
+ * find out from the 404 and show something else.
+ */
+export function backCoverUrl(
+  album: Pick<Album, "primaryReleaseId">,
+  size: CoverSize = 500,
+): string | null {
+  if (!album.primaryReleaseId) return null;
+  return `${CAA_BASE}/release/${album.primaryReleaseId}/back-${size}`;
+}
+
 /** Same, for a search result we haven't cached yet. */
 export function coverArtUrlForMbid(mbid: string, size: CoverSize = 500): string {
   return `${CAA_BASE}/release-group/${mbid}/front-${size}`;

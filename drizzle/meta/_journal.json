@@ -15,6 +15,13 @@
       "when": 1785672089139,
       "tag": "0001_track_count_lazy",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785683566826,
+      "tag": "0002_tracklist",
+      "breakpoints": true
     }
   ]
 }

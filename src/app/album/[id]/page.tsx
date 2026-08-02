@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { Suspense } from "react";
 
-import { AlbumArt } from "@/components/AlbumArt";
+import { AlbumSleeve } from "@/components/AlbumSleeve";
 import { Stars } from "@/components/Stars";
 import { deleteEntry, toggleWatchlist } from "@/lib/actions";
-import { coverArtUrl } from "@/lib/coverart";
+import { backCoverUrl, coverArtUrl } from "@/lib/coverart";
 import { formatDate, formatRelative } from "@/lib/format";
 import { loadAlbumOrNotFound } from "@/lib/loadAlbum";
 import {
@@ -53,15 +53,14 @@ export default async function AlbumPage({
     <article className="space-y-10">
       <div className="grid gap-8 md:grid-cols-[minmax(0,320px)_1fr]">
         <div className="space-y-4">
-          <div className="ring-ink-800 rounded-tile overflow-hidden shadow-2xl shadow-black/50 ring-1">
-            <AlbumArt
-              src={coverArtUrl(album, 1200)}
-              title={album.title}
-              artist={album.artistName}
-              sizes="(max-width: 768px) 100vw, 320px"
-              priority
-            />
-          </div>
+          <AlbumSleeve
+            albumId={album.id}
+            frontUrl={coverArtUrl(album, 1200)}
+            backUrl={backCoverUrl(album, 1200)}
+            title={album.title}
+            artist={album.artistName}
+            trackCount={album.trackCount}
+          />
 
           <div className="flex flex-col gap-2">
             <Link href={`/album/${album.id}/log`} className="btn btn-primary w-full">

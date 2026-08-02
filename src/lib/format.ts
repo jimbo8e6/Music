@@ -71,3 +71,20 @@ export function initialsFor(title: string): string {
     .map((word) => word[0]?.toUpperCase() ?? "")
     .join("");
 }
+
+/** "3:47" — track length from milliseconds, or an em dash when unknown. */
+export function formatDuration(ms: number | null): string {
+  if (!ms || ms < 0) return "—";
+  const totalSeconds = Math.round(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+/** "42 min" — total running time, for the tracklist footer. */
+export function formatTotalDuration(msValues: (number | null)[]): string | null {
+  const total = msValues.reduce<number>((sum, ms) => sum + (ms ?? 0), 0);
+  if (!total) return null;
+  const minutes = Math.round(total / 60000);
+  return `${minutes} min`;
+}
