@@ -50,11 +50,24 @@ async function mbFetch<T>(path: string, params: Record<string, string>): Promise
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
   return schedule(async () => {
-    const res = await fetch(url, {
-      headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
-      // Upstream data barely moves; our own DB is the real cache.
-      next: { revalidate: 60 * 60 * 24 },
-    });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+        // Upstream data barely moves; our own DB is the real cache.
+        next: { revalidate: 60 * 60 * 24 },
+        // Their search server occasionally stalls. Fail with something the
+        // page can explain rather than spinning until the platform gives up.
+        signal: AbortSignal.timeout(12_000),
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "TimeoutError") {
+        throw new MusicBrainzError(
+          "MusicBrainz took too long to respond. It does this occasionally — try again.",
+        );
+      }
+      throw error;
+    }
 
     if (res.status === 404) {
       throw new MusicBrainzError(`Not found: ${path}`, 404);
@@ -352,9 +365,10 @@ export async function searchAlbums(
   const trimmed = query.trim();
   if (!trimmed) return [];
 
-  // Ask for more than we show: re-ranking can only reorder what it is given,
-  // and the record you want is often outside MusicBrainz's own top 24.
-  const fetchLimit = Math.min(100, Math.max(limit * 3, 50));
+  // Ask for more than we show, since re-ranking can only reorder what it is
+  // given — but not much more. MusicBrainz slows down noticeably on large
+  // result sets, and the album you meant is never 80 places down.
+  const fetchLimit = Math.min(60, Math.max(limit * 2, 40));
 
   const data = await mbFetch<{ "release-groups"?: MBReleaseGroup[] }>(
     "/release-group",

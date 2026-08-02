@@ -1,30 +1,73 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 
+/**
+ * `inline` is the compact one in the header; `prominent` is the search page's
+ * own box, with a labelled button beside it.
+ *
+ * Both report progress. MusicBrainz can take a couple of seconds to answer, and
+ * without a pending state pressing enter looks like it did nothing at all.
+ */
 export function SearchBox({
   defaultValue = "",
   autoFocus = false,
   placeholder = "Search albums…",
+  variant = "inline",
 }: {
   defaultValue?: string;
   autoFocus?: boolean;
   placeholder?: string;
+  variant?: "inline" | "prominent";
 }) {
   const router = useRouter();
   const [value, setValue] = useState(defaultValue);
+  const [isPending, startTransition] = useTransition();
+
+  function submit(event: React.FormEvent) {
+    event.preventDefault();
+    const query = value.trim();
+    if (!query) return;
+
+    startTransition(() => {
+      router.push(`/search?q=${encodeURIComponent(query)}`);
+    });
+  }
+
+  if (variant === "prominent") {
+    return (
+      <form role="search" onSubmit={submit} className="flex w-full gap-2">
+        <input
+          type="search"
+          name="q"
+          value={value}
+          autoFocus={autoFocus}
+          onChange={(event) => setValue(event.target.value)}
+          placeholder={placeholder}
+          aria-label="Search albums"
+          className="field flex-1"
+        />
+        <button
+          type="submit"
+          className="btn btn-primary shrink-0"
+          disabled={isPending || !value.trim()}
+        >
+          {isPending ? (
+            <>
+              <Spinner />
+              Searching…
+            </>
+          ) : (
+            "Search"
+          )}
+        </button>
+      </form>
+    );
+  }
 
   return (
-    <form
-      role="search"
-      onSubmit={(event) => {
-        event.preventDefault();
-        const query = value.trim();
-        if (query) router.push(`/search?q=${encodeURIComponent(query)}`);
-      }}
-      className="relative w-full"
-    >
+    <form role="search" onSubmit={submit} className="relative w-full">
       <input
         type="search"
         name="q"
@@ -33,14 +76,25 @@ export function SearchBox({
         onChange={(event) => setValue(event.target.value)}
         placeholder={placeholder}
         aria-label="Search albums"
-        className="field pl-9"
+        className="field pr-10"
       />
-      <span
-        aria-hidden
-        className="text-mist-400 pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm"
+      <button
+        type="submit"
+        aria-label="Search"
+        disabled={isPending || !value.trim()}
+        className="text-mist-400 hover:text-accent-400 absolute top-1/2 right-2 -translate-y-1/2 rounded p-1 transition-colors disabled:opacity-50"
       >
-        ⌕
-      </span>
+        {isPending ? <Spinner /> : <span aria-hidden>⌕</span>}
+      </button>
     </form>
+  );
+}
+
+function Spinner() {
+  return (
+    <span
+      aria-hidden
+      className="border-current/30 inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-t-current align-[-2px]"
+    />
   );
 }

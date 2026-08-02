@@ -1,6 +1,9 @@
+import { Suspense } from "react";
+
 import { inArray } from "drizzle-orm";
 
 import { AlbumCard } from "@/components/AlbumCard";
+import { AlbumGridSkeleton } from "@/components/AlbumGridSkeleton";
 import { EmptyState } from "@/components/EmptyState";
 import { SearchBox } from "@/components/SearchBox";
 import { db, getCurrentUser, schema } from "@/db";
@@ -27,11 +30,32 @@ export default async function SearchPage({
           defaultValue={query}
           autoFocus={!query}
           placeholder="Album, artist, or both…"
+          variant="prominent"
         />
+        <p className="text-mist-400 text-center text-xs">
+          Try the artist and album together — “pink floyd the wall”.
+        </p>
       </div>
 
-      {query ? <Results query={query} /> : null}
+      {query ? (
+        // Keyed on the query so a new search swaps straight back to the
+        // skeleton instead of leaving the previous results sitting there.
+        <Suspense key={query} fallback={<SearchingNotice query={query} />}>
+          <Results query={query} />
+        </Suspense>
+      ) : null}
     </div>
+  );
+}
+
+function SearchingNotice({ query }: { query: string }) {
+  return (
+    <section className="space-y-4" aria-live="polite">
+      <p className="text-mist-400 text-xs tracking-wider uppercase">
+        Searching MusicBrainz for “{query}”…
+      </p>
+      <AlbumGridSkeleton />
+    </section>
   );
 }
 
