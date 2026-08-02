@@ -12,8 +12,8 @@ write about it, and keep the whole thing in one dark, artwork-first grid.
   colour tile when an album has no cover uploaded.
 - **Turn the sleeve over** on an album page for the back cover, or the
   tracklist when nobody has uploaded one.
-- **Play on Spotify or Apple Music** — the album itself where MusicBrainz
-  records the link, a search on the service where it doesn't.
+- **Play on Spotify, Apple Music, Bandcamp or YouTube** — the album itself
+  where MusicBrainz records the link, a search on the service where it doesn't.
 - **Rate** in half stars, 0.5 to 5.
 - **Review** with an optional headline, a listen date, and a favourite flag.
 - **Library** sortable by rating, artist, title or release year.
@@ -91,11 +91,17 @@ entirely by browsing the discography by artist id, which returns the catalogue
 itself rather than a scored sample. Album search stays a single request and only
 has to answer "which record is this".
 
-**Streaming links need no Spotify or Apple credentials.** MusicBrainz keeps
+**Streaming links need no credentials from any service.** MusicBrainz keeps
 them as URL relations, matched here on host rather than relation type, since
-contributors file them under several. Coverage is good but not complete, so a
-missing link becomes a search on the service — one click away, and never a dead
-button.
+contributors file them under several. Both requests an album page already makes
+carry them — the release group when the album is cached, the release when the
+tracklist is fetched — and the two are merged, because a release usually lists
+more than its group does.
+
+Spotify and Apple Music fall back to a search when no link is recorded; their
+catalogues are broad enough that a search is worth offering blind. Bandcamp and
+YouTube only appear when there is a real link, since a search that finds nothing
+is worse than no button.
 
 **Tracklists load on demand.** Back covers hang off a specific release rather
 than the release group, which only ever exposes a front, so both the back image

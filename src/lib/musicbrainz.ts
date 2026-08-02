@@ -556,6 +556,8 @@ function betterOf(a: RankedResult, b: RankedResult): boolean {
 export interface ExternalLinks {
   spotify?: string;
   appleMusic?: string;
+  bandcamp?: string;
+  youtube?: string;
 }
 
 interface MBRelation {
@@ -586,15 +588,42 @@ export function streamingLinksFrom(
     }
 
     if (!links.spotify && host.endsWith("open.spotify.com")) links.spotify = url;
+
     if (
       !links.appleMusic &&
       (host.endsWith("music.apple.com") || host.endsWith("itunes.apple.com"))
     ) {
       links.appleMusic = url;
     }
+
+    // Artists get their own subdomain, so match the suffix rather than the host.
+    if (!links.bandcamp && (host === "bandcamp.com" || host.endsWith(".bandcamp.com"))) {
+      links.bandcamp = url;
+    }
+
+    if (host === "music.youtube.com") {
+      // Prefer the music front end over a plain video link, even a later one.
+      links.youtube = url;
+    } else if (
+      !links.youtube &&
+      (host.endsWith("youtube.com") || host === "youtu.be")
+    ) {
+      links.youtube = url;
+    }
   }
 
   return links;
+}
+
+/** Later links fill gaps in earlier ones; the first source wins a conflict. */
+export function mergeLinks(...sources: ExternalLinks[]): ExternalLinks {
+  const merged: ExternalLinks = {};
+  for (const source of sources) {
+    for (const [key, value] of Object.entries(source) as [keyof ExternalLinks, string][]) {
+      if (value && !merged[key]) merged[key] = value;
+    }
+  }
+  return merged;
 }
 
 export interface AlbumDetail extends AlbumSearchResult {
@@ -682,13 +711,17 @@ interface MBMedium {
  * Best-effort: a release MusicBrainz has no tracklist for is not worth failing
  * a page over, so this returns null rather than throwing.
  */
-export async function fetchTracklist(
-  releaseId: string,
-): Promise<Tracklist | null> {
+export interface ReleaseDetail {
+  tracklist: Tracklist | null;
+  /** Releases often carry links the release group doesn't. */
+  links: ExternalLinks;
+}
+
+export async function fetchRelease(releaseId: string): Promise<ReleaseDetail> {
   try {
-    const release = await mbFetch<{ media?: MBMedium[] }>(
+    const release = await mbFetch<{ media?: MBMedium[]; relations?: MBRelation[] }>(
       `/release/${releaseId}`,
-      { inc: "recordings" },
+      { inc: "recordings+url-rels" },
       { cacheMs: CACHE_MS.lookup },
     );
 
@@ -712,11 +745,12 @@ export async function fetchTracklist(
       media.reduce((sum, medium) => sum + (medium["track-count"] ?? 0), 0) ||
       tracks.length;
 
-    if (!count) return null;
-
-    return { tracks, count, mediumCount: media.length || 1 };
+    return {
+      tracklist: count ? { tracks, count, mediumCount: media.length || 1 } : null,
+      links: streamingLinksFrom(release.relations),
+    };
   } catch {
-    return null;
+    return { tracklist: null, links: {} };
   }
 }
 

@@ -6,8 +6,9 @@ import { db, getCurrentUser, schema } from "@/db";
 import type { Album, Entry } from "@/db/schema";
 import {
   fetchExternalLinks,
-  fetchTracklist,
+  fetchRelease,
   lookupAlbum,
+  mergeLinks,
   type ExternalLinks,
   type Track,
 } from "@/lib/musicbrainz";
@@ -85,21 +86,23 @@ export async function getTracklist(id: string): Promise<AlbumTracklist> {
 
   if (!album.primaryReleaseId) return { tracks: [], count: album.trackCount };
 
-  const fetched = await fetchTracklist(album.primaryReleaseId);
+  const { tracklist, links } = await fetchRelease(album.primaryReleaseId);
 
   await db
     .update(albums)
     .set({
-      trackCount: fetched?.count ?? album.trackCount ?? null,
+      trackCount: tracklist?.count ?? album.trackCount ?? null,
       // Store [] rather than null on a miss, so this is asked once and no more.
-      tracks: fetched?.tracks ?? [],
+      tracks: tracklist?.tracks ?? [],
       trackCountCheckedAt: new Date(),
+      // The same response carries links the release group may not have had.
+      externalUrls: mergeLinks(album.externalUrls ?? {}, links),
     })
     .where(eq(albums.id, id));
 
   return {
-    tracks: fetched?.tracks ?? [],
-    count: fetched?.count ?? album.trackCount ?? null,
+    tracks: tracklist?.tracks ?? [],
+    count: tracklist?.count ?? album.trackCount ?? null,
   };
 }
 
@@ -114,7 +117,14 @@ export async function getExternalLinks(id: string): Promise<ExternalLinks> {
   if (album.externalUrls !== null) return album.externalUrls;
   if (!album.mbid) return {};
 
-  const links = await fetchExternalLinks(album.mbid);
+  let links = await fetchExternalLinks(album.mbid);
+
+  // Release groups carry fewer links than the releases under them. Only pay for
+  // the release when the group gave us nothing — and that request is the one
+  // the tracklist uses, so it is usually already cached.
+  if (Object.keys(links).length === 0 && album.primaryReleaseId) {
+    links = (await fetchRelease(album.primaryReleaseId)).links;
+  }
 
   await db.update(albums).set({ externalUrls: links }).where(eq(albums.id, id));
 
