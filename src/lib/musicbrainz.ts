@@ -142,6 +142,27 @@ const SECONDARY_TYPE_PENALTY: Record<string, number> = {
 
 const DEFAULT_SECONDARY_PENALTY = 25;
 
+/**
+ * Words that mark a repackage rather than the record itself. A remaster or box
+ * set is the same album with a longer name, and the longer name is exactly what
+ * lets it score well — so it needs pushing back under the original.
+ */
+const EDITION_NOISE = new Set([
+  "remaster",
+  "remastered",
+  "deluxe",
+  "expanded",
+  "anniversary",
+  "edition",
+  "reissue",
+  "immersion",
+  "bonus",
+  "collectors",
+  "definitive",
+  "redux",
+  "recorded",
+]);
+
 /** Lowercase, strip punctuation and collapse spaces, for comparing titles. */
 function normalise(value: string): string {
   return value
@@ -151,9 +172,27 @@ function normalise(value: string): string {
     .trim();
 }
 
+function tokensOf(value: string): string[] {
+  return value.split(" ").filter(Boolean);
+}
+
 /**
  * MusicBrainz scores by text match alone, which ranks a 2011 compilation the
  * same as the album everyone means. Re-rank on top of its score.
+ *
+ * The two signals that matter are symmetric:
+ *
+ *   coverage  — how much of what you typed is explained by this record at all.
+ *               "pink floyd the wall" is fully explained by the album The Wall
+ *               credited to Pink Floyd: nothing you typed is left over.
+ *   precision — how much of the record's title you actually asked for. Both
+ *               "The Wall" and "Is There Anybody Out There? The Wall Live
+ *               1980–81" contain your words, but only the first is *about*
+ *               them, and precision is what separates the two.
+ *
+ * Neither alone is enough. Coverage on its own promotes anything by the right
+ * artist; precision on its own promotes short titles regardless of who made
+ * them.
  */
 function relevanceOf(result: AlbumSearchResult, query: string): number {
   const wanted = normalise(query);
@@ -162,8 +201,30 @@ function relevanceOf(result: AlbumSearchResult, query: string): number {
 
   let score = result.score;
 
+  const queryTokens = tokensOf(wanted);
+  const titleTokens = tokensOf(title);
+  const inTitle = new Set(titleTokens);
+  const inArtist = new Set(tokensOf(artist));
+
+  if (queryTokens.length && titleTokens.length) {
+    const covered = queryTokens.filter(
+      (token) => inTitle.has(token) || inArtist.has(token),
+    ).length;
+    const asked = titleTokens.filter((token) => wanted.includes(token)).length;
+
+    score += (covered / queryTokens.length) * 50;
+    score += (asked / titleTokens.length) * 35;
+  }
+
+  // Whole-field matches, for when the query is just one or the other. Only
+  // exact equality earns this: a prefix bonus double-counts what precision
+  // already measures, and it rewards titles padded with the artist's own name.
   if (title === wanted) score += 60;
-  else if (title.startsWith(wanted)) score += 25;
+
+  // A repackage carries the original's title plus decoration, which scores well
+  // on text alone. Discount it so the album itself stays on top.
+  const noise = titleTokens.filter((token) => EDITION_NOISE.has(token)).length;
+  if (noise > 0) score -= Math.min(noise * 18, 36);
 
   // "pink floyd" should bring back everything they made, not just an album of
   // that name — so an artist match counts nearly as much as a title match.
