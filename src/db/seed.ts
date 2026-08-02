@@ -23,7 +23,7 @@ const EXAMPLES: [string, number, string | null][] = [
 ];
 
 async function main() {
-  const user = getCurrentUser();
+  const user = await getCurrentUser();
   console.log(`✓ local account ready (${user.username})`);
 
   if (!process.argv.includes("--albums")) {
@@ -39,7 +39,8 @@ async function main() {
         continue;
       }
 
-      db.insert(schema.albums)
+      await db
+        .insert(schema.albums)
         .values({
           id: best.mbid,
           mbid: best.mbid,
@@ -51,18 +52,17 @@ async function main() {
           primaryType: best.primaryType,
           secondaryTypes: best.secondaryTypes,
         })
-        .onConflictDoNothing()
-        .run();
+        .onConflictDoNothing();
 
-      db.insert(schema.entries)
+      await db
+        .insert(schema.entries)
         .values({
           userId: user.id,
           albumId: best.mbid,
           rating,
           reviewText: review,
         })
-        .onConflictDoNothing()
-        .run();
+        .onConflictDoNothing();
 
       console.log(`  ✓ ${best.title} — ${best.artistName}`);
     } catch (error) {

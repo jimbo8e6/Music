@@ -13,7 +13,7 @@ const nextConfig: NextConfig = {
     imageSizes: [96, 128, 192, 256, 384],
     deviceSizes: [640, 750, 828, 1080, 1200],
   },
-  serverExternalPackages: ["better-sqlite3"],
+  serverExternalPackages: ["@libsql/client"],
   // Migrations are read from disk at startup, so they have to survive tracing.
   outputFileTracingIncludes: {
     "/**": ["./drizzle/**"],

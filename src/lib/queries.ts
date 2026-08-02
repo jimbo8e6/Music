@@ -17,7 +17,7 @@ const { albums, entries, watchlist } = schema;
  * with exactly the albums the user cares about and nothing else.
  */
 export async function getOrFetchAlbum(id: string): Promise<Album | null> {
-  const cached = db.select().from(albums).where(eq(albums.id, id)).get();
+  const cached = await getAlbum(id);
   if (cached) return cached;
 
   // Only MBIDs are resolvable upstream; `local-…` ids must already exist.
@@ -25,7 +25,7 @@ export async function getOrFetchAlbum(id: string): Promise<Album | null> {
 
   const detail = await lookupAlbum(id);
 
-  return db
+  const inserted = await db
     .insert(albums)
     .values({
       id: detail.mbid,
@@ -46,14 +46,17 @@ export async function getOrFetchAlbum(id: string): Promise<Album | null> {
     })
     .returning()
     .get();
+
+  return inserted ?? null;
 }
 
-export function getAlbum(id: string): Album | undefined {
+export async function getAlbum(id: string): Promise<Album | undefined> {
+  await getCurrentUser();
   return db.select().from(albums).where(eq(albums.id, id)).get();
 }
 
-export function getEntryForAlbum(albumId: string): Entry | undefined {
-  const user = getCurrentUser();
+export async function getEntryForAlbum(albumId: string): Promise<Entry | undefined> {
+  const user = await getCurrentUser();
   return db
     .select()
     .from(entries)
@@ -63,7 +66,7 @@ export function getEntryForAlbum(albumId: string): Entry | undefined {
 
 export type LibrarySort = "recent" | "rating" | "title" | "artist" | "year";
 
-export function getEntries({
+export async function getEntries({
   limit,
   sort = "recent",
   ratedOnly = false,
@@ -73,8 +76,8 @@ export function getEntries({
   sort?: LibrarySort;
   ratedOnly?: boolean;
   reviewedOnly?: boolean;
-} = {}): EntryWithAlbum[] {
-  const user = getCurrentUser();
+} = {}): Promise<EntryWithAlbum[]> {
+  const user = await getCurrentUser();
 
   const conditions = [eq(entries.userId, user.id)];
   if (ratedOnly) conditions.push(isNotNull(entries.rating));
@@ -96,11 +99,11 @@ export function getEntries({
     .where(and(...conditions))
     .orderBy(...orderBy);
 
-  return limit ? query.limit(limit).all() : query.all();
+  return limit ? query.limit(limit) : query;
 }
 
-export function getEntryById(id: number): EntryWithAlbum | undefined {
-  const user = getCurrentUser();
+export async function getEntryById(id: number): Promise<EntryWithAlbum | undefined> {
+  const user = await getCurrentUser();
   return db
     .select({ entry: entries, album: albums })
     .from(entries)
@@ -118,11 +121,11 @@ export interface LibraryStats {
   distribution: number[];
 }
 
-export function getStats(): LibraryStats {
-  const user = getCurrentUser();
+export async function getStats(): Promise<LibraryStats> {
+  const user = await getCurrentUser();
   const mine = eq(entries.userId, user.id);
 
-  const totals = db
+  const totals = await db
     .select({
       logged: count(),
       rated: sql<number>`sum(case when ${entries.rating} is not null then 1 else 0 end)`,
@@ -133,12 +136,11 @@ export function getStats(): LibraryStats {
     .where(mine)
     .get();
 
-  const buckets = db
+  const buckets = await db
     .select({ rating: entries.rating, total: count() })
     .from(entries)
     .where(and(mine, isNotNull(entries.rating)))
-    .groupBy(entries.rating)
-    .all();
+    .groupBy(entries.rating);
 
   const distribution = Array<number>(10).fill(0);
   for (const bucket of buckets) {
@@ -156,21 +158,21 @@ export function getStats(): LibraryStats {
   };
 }
 
-export function getWatchlist(): Album[] {
-  const user = getCurrentUser();
-  return db
+export async function getWatchlist(): Promise<Album[]> {
+  const user = await getCurrentUser();
+  const rows = await db
     .select({ album: albums })
     .from(watchlist)
     .innerJoin(albums, eq(watchlist.albumId, albums.id))
     .where(eq(watchlist.userId, user.id))
-    .orderBy(desc(watchlist.createdAt))
-    .all()
-    .map((row) => row.album);
+    .orderBy(desc(watchlist.createdAt));
+
+  return rows.map((row) => row.album);
 }
 
-export function isOnWatchlist(albumId: string): boolean {
-  const user = getCurrentUser();
-  const row = db
+export async function isOnWatchlist(albumId: string): Promise<boolean> {
+  const user = await getCurrentUser();
+  const row = await db
     .select({ id: watchlist.id })
     .from(watchlist)
     .where(and(eq(watchlist.userId, user.id), eq(watchlist.albumId, albumId)))

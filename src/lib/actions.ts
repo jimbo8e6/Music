@@ -34,7 +34,7 @@ export async function saveEntry(
     return { error: "Could not load that album from MusicBrainz. Try again." };
   }
 
-  const user = getCurrentUser();
+  const user = await getCurrentUser();
   const rating = parseRating(formData.get("rating"));
   const reviewText = String(formData.get("reviewText") ?? "").trim() || null;
   const reviewTitle = String(formData.get("reviewTitle") ?? "").trim() || null;
@@ -48,7 +48,8 @@ export async function saveEntry(
 
   const now = new Date();
 
-  db.insert(entries)
+  await db
+    .insert(entries)
     .values({
       userId: user.id,
       albumId: album.id,
@@ -63,13 +64,12 @@ export async function saveEntry(
     .onConflictDoUpdate({
       target: [entries.userId, entries.albumId],
       set: { rating, reviewTitle, reviewText, listenedOn, isFavorite, updatedAt: now },
-    })
-    .run();
+    });
 
   // Logging an album means it is no longer something you're waiting to hear.
-  db.delete(watchlist)
-    .where(and(eq(watchlist.userId, user.id), eq(watchlist.albumId, album.id)))
-    .run();
+  await db
+    .delete(watchlist)
+    .where(and(eq(watchlist.userId, user.id), eq(watchlist.albumId, album.id)));
 
   revalidatePath("/");
   revalidatePath("/library");
@@ -79,11 +79,11 @@ export async function saveEntry(
 
 export async function deleteEntry(formData: FormData): Promise<void> {
   const albumId = String(formData.get("albumId") ?? "");
-  const user = getCurrentUser();
+  const user = await getCurrentUser();
 
-  db.delete(entries)
-    .where(and(eq(entries.userId, user.id), eq(entries.albumId, albumId)))
-    .run();
+  await db
+    .delete(entries)
+    .where(and(eq(entries.userId, user.id), eq(entries.albumId, albumId)));
 
   revalidatePath("/");
   revalidatePath("/library");
@@ -98,17 +98,17 @@ export async function toggleWatchlist(formData: FormData): Promise<void> {
   const album = await getOrFetchAlbum(albumId).catch(() => null);
   if (!album) return;
 
-  const user = getCurrentUser();
-  const existing = db
+  const user = await getCurrentUser();
+  const existing = await db
     .select({ id: watchlist.id })
     .from(watchlist)
     .where(and(eq(watchlist.userId, user.id), eq(watchlist.albumId, album.id)))
     .get();
 
   if (existing) {
-    db.delete(watchlist).where(eq(watchlist.id, existing.id)).run();
+    await db.delete(watchlist).where(eq(watchlist.id, existing.id));
   } else {
-    db.insert(watchlist).values({ userId: user.id, albumId: album.id }).run();
+    await db.insert(watchlist).values({ userId: user.id, albumId: album.id });
   }
 
   revalidatePath("/watchlist");

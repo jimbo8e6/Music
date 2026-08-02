@@ -10,10 +10,12 @@ import { getEntries, getStats } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
-export default function HomePage() {
-  const recent = getEntries({ limit: 12 });
-  const reviews = getEntries({ limit: 4, reviewedOnly: true });
-  const stats = getStats();
+export default async function HomePage() {
+  const [recent, reviews, stats] = await Promise.all([
+    getEntries({ limit: 12 }),
+    getEntries({ limit: 4, reviewedOnly: true }),
+    getStats(),
+  ]);
 
   if (recent.length === 0) {
     return (

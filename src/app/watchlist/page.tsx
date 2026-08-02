@@ -6,8 +6,8 @@ import { getWatchlist } from "@/lib/queries";
 export const metadata = { title: "Listen later" };
 export const dynamic = "force-dynamic";
 
-export default function WatchlistPage() {
-  const albums = getWatchlist();
+export default async function WatchlistPage() {
+  const albums = await getWatchlist();
 
   return (
     <div className="space-y-6">

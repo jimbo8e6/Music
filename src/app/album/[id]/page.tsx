@@ -29,8 +29,10 @@ export default async function AlbumPage({
   const { id } = await params;
   const album = await loadAlbumOrNotFound(id);
 
-  const entry = getEntryForAlbum(album.id);
-  const onWatchlist = isOnWatchlist(album.id);
+  const [entry, onWatchlist] = await Promise.all([
+    getEntryForAlbum(album.id),
+    isOnWatchlist(album.id),
+  ]);
 
   const meta = [
     album.primaryType,

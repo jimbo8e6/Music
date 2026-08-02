@@ -46,7 +46,9 @@ cp .env.example .env.local
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `DATABASE_URL` | `./wax.db` | SQLite file path |
+| `DATABASE_URL` | `file:./wax.db` | Local SQLite file |
+| `TURSO_DATABASE_URL` | unset | Hosted database. Setting this (with the token) switches the app off the local file — required on serverless hosts |
+| `TURSO_AUTH_TOKEN` | unset | Turso token. Required whenever `TURSO_DATABASE_URL` is set |
 | `MUSICBRAINZ_CONTACT` | repo URL | Goes in the `User-Agent`; MusicBrainz asks for a real contact and throttles anonymous clients harder |
 | `NEXT_PUBLIC_UNOPTIMIZED_IMAGES` | unset | Set to `1` to bypass Next's image optimiser (useful behind a proxy that blocks the Archive CDN) |
 
@@ -86,6 +88,32 @@ migration.
 
 ## Deploying
 
-SQLite plus `better-sqlite3` needs a persistent filesystem, so this runs on
-Fly.io, Railway or a VPS as-is. On Vercel, swap the driver for libSQL/Turso —
-the Drizzle schema and every query carry over unchanged.
+The app talks to SQLite through libSQL, which reaches both a local file and a
+hosted [Turso](https://turso.tech) database with the same driver — so local
+development and production run identical code.
+
+**Serverless hosts need Turso.** Vercel, Netlify and Cloudflare give each
+function a read-only filesystem that is discarded between invocations, so a
+SQLite file has nowhere to live: the app would fail to open the database on
+every request, and any rating that did get written would vanish. Point it at a
+hosted database instead:
+
+1. Create the database (free tier is far beyond what this app needs):
+   ```bash
+   turso db create wax
+   turso db show wax --url          # -> libsql://wax-you.turso.io
+   turso db tokens create wax       # -> the auth token
+   ```
+2. Apply the schema once:
+   ```bash
+   TURSO_DATABASE_URL=… TURSO_AUTH_TOKEN=… npm run db:migrate
+   ```
+3. Set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in the host's environment
+   variables, then redeploy.
+
+Step 2 is belt and braces — the app migrates on startup anyway — but running it
+up front means the first request hits a database that is already in shape,
+instead of several cold instances racing to build it.
+
+**Hosts with a persistent disk** (Fly.io, Railway, a VPS) need none of this.
+Leave the Turso variables unset and the app keeps its SQLite file on the volume.

@@ -16,7 +16,7 @@ export default async function LogPage({
   const { id } = await params;
   const album = await loadAlbumOrNotFound(id);
 
-  const entry = getEntryForAlbum(album.id);
+  const entry = await getEntryForAlbum(album.id);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">

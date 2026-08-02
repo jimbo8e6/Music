@@ -2,7 +2,7 @@
   "name": "wax",
   "version": "0.1.0",
   "private": true,
-  "description": "Letterboxd for albums — rate, review and remember what you listen to.",
+  "description": "Letterboxd for albums \u2014 rate, review and remember what you listen to.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -11,10 +11,11 @@
     "typecheck": "tsc --noEmit",
     "db:push": "drizzle-kit push",
     "db:seed": "tsx src/db/seed.ts",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:migrate": "tsx src/db/migrate.ts"
   },
   "dependencies": {
-    "better-sqlite3": "^11.8.1",
+    "@libsql/client": "^0.17.4",
     "drizzle-orm": "^0.38.4",
     "next": "^15.1.6",
     "react": "^19.0.0",
@@ -22,7 +23,6 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
-    "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.7",
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",

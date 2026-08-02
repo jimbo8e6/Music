@@ -34,7 +34,7 @@ export default async function LibraryPage({
   const filter =
     FILTERS.find((f) => f.key === params.filter)?.key ?? "all";
 
-  const rows = getEntries({
+  const rows = await getEntries({
     sort,
     ratedOnly: filter === "rated",
     reviewedOnly: filter === "reviews",

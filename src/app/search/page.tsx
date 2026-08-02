@@ -50,7 +50,7 @@ async function Results({ query }: { query: string }) {
 
     // One query tells us which of these are already in the library, so cards
     // can show the rating the user already gave.
-    const ratings = ratingsFor(results.map((result) => result.mbid));
+    const ratings = await ratingsFor(results.map((result) => result.mbid));
 
     return (
       <section className="space-y-4">
@@ -92,11 +92,11 @@ async function Results({ query }: { query: string }) {
 }
 
 /** Existing ratings for these album ids, keyed by id. */
-function ratingsFor(ids: string[]): Map<string, number | null> {
+async function ratingsFor(ids: string[]): Promise<Map<string, number | null>> {
   if (ids.length === 0) return new Map();
 
-  const user = getCurrentUser();
-  const rows = db
+  const user = await getCurrentUser();
+  const rows = await db
     .select({ albumId: schema.entries.albumId, rating: schema.entries.rating })
     .from(schema.entries)
     .where(
@@ -104,8 +104,7 @@ function ratingsFor(ids: string[]): Map<string, number | null> {
         eq(schema.entries.userId, user.id),
         inArray(schema.entries.albumId, ids),
       ),
-    )
-    .all();
+    );
 
   return new Map(rows.map((row) => [row.albumId, row.rating]));
 }
