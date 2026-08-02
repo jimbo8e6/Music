@@ -358,6 +358,55 @@ export interface SearchOptions {
  * Free-text album search. Defaults to albums and EPs, which is what people mean
  * when they say "album" — singles and broadcasts just add noise.
  */
+async function fetchReleaseGroups(
+  query: string,
+  limit: number,
+): Promise<MBReleaseGroup[]> {
+  const data = await mbFetch<{ "release-groups"?: MBReleaseGroup[] }>(
+    "/release-group",
+    { query, limit: String(limit) },
+  );
+  return data["release-groups"] ?? [];
+}
+
+/**
+ * The artist this query names, if it names one and nothing else.
+ *
+ * "placebo", "placebo placebo" and "the who" are all just a band's name; every
+ * record they made matches the text equally well, so the order MusicBrainz
+ * returns them in carries no information and the album you wanted may not come
+ * back at all. Recognising that lets us go and ask for the discography instead.
+ */
+function artistNamedByQuery(
+  query: string,
+  groups: MBReleaseGroup[],
+): { mbid: string; name: string } | null {
+  const queryTokens = new Set(tokensOf(normalise(query)));
+  if (queryTokens.size === 0) return null;
+
+  let best: { mbid: string; name: string; score: number } | null = null;
+
+  for (const rg of groups) {
+    const credit = rg["artist-credit"]?.[0]?.artist;
+    if (!credit?.id || !credit.name) continue;
+
+    // Everything typed has to be part of the artist's name — otherwise the
+    // query says something about the title too, and the normal search stands.
+    const artistTokens = new Set(tokensOf(normalise(credit.name)));
+    const namesOnlyArtist = [...queryTokens].every((token) =>
+      artistTokens.has(token),
+    );
+    if (!namesOnlyArtist) continue;
+
+    const score = rg.score ?? 0;
+    if (!best || score > best.score) {
+      best = { mbid: credit.id, name: credit.name, score };
+    }
+  }
+
+  return best ? { mbid: best.mbid, name: best.name } : null;
+}
+
 export async function searchAlbums(
   query: string,
   { limit = 24, types = ["album", "ep"] }: SearchOptions = {},
@@ -370,12 +419,25 @@ export async function searchAlbums(
   // result sets, and the album you meant is never 80 places down.
   const fetchLimit = Math.min(60, Math.max(limit * 2, 40));
 
-  const data = await mbFetch<{ "release-groups"?: MBReleaseGroup[] }>(
-    "/release-group",
-    { query: buildSearchQuery(trimmed, types), limit: String(fetchLimit) },
+  let groups = await fetchReleaseGroups(
+    buildSearchQuery(trimmed, types),
+    fetchLimit,
   );
 
-  const groups = data["release-groups"] ?? [];
+  // If the query was only an artist's name, the first pass was a scored sample
+  // of a catalogue where everything scores alike. Ask for the catalogue itself.
+  const artist = artistNamedByQuery(trimmed, groups);
+  if (artist) {
+    const typeFilter = types.length
+      ? ` AND primarytype:(${types.join(" OR ")})`
+      : "";
+    const discography = await fetchReleaseGroups(
+      `arid:"${artist.mbid}"${typeFilter}`,
+      100,
+    ).catch(() => [] as MBReleaseGroup[]);
+
+    groups = [...groups, ...discography];
+  }
 
   const ranked = groups.map((rg) => {
     const result = toSearchResult(rg);
@@ -384,23 +446,30 @@ export async function searchAlbums(
 
   // MusicBrainz happily returns the same album as several release-groups when
   // reissues were modelled separately; collapse on title+artist, keep the best.
+  // Same title, same artist, equal relevance means the same record twice — and
+  // then the one that came out first is the album, the other is the reissue.
   const seen = new Map<string, (typeof ranked)[number]>();
   for (const candidate of ranked) {
     const key = `${normalise(candidate.result.title)}::${normalise(candidate.result.artistName)}`;
     const existing = seen.get(key);
-    if (!existing || candidate.relevance > existing.relevance) {
-      seen.set(key, candidate);
-    }
+    if (!existing || betterOf(candidate, existing)) seen.set(key, candidate);
   }
 
   return [...seen.values()]
-    .sort((a, b) => {
-      if (b.relevance !== a.relevance) return b.relevance - a.relevance;
-      // Same relevance: the original release beats the reissue.
-      return (a.result.year ?? 9999) - (b.result.year ?? 9999);
-    })
+    .sort((a, b) => (betterOf(a, b) ? -1 : betterOf(b, a) ? 1 : 0))
     .slice(0, limit)
     .map((candidate) => candidate.result);
+}
+
+interface RankedResult {
+  result: AlbumSearchResult;
+  relevance: number;
+}
+
+/** Higher relevance wins; on a tie the earlier release does. */
+function betterOf(a: RankedResult, b: RankedResult): boolean {
+  if (a.relevance !== b.relevance) return a.relevance > b.relevance;
+  return (a.result.year ?? 9999) < (b.result.year ?? 9999);
 }
 
 export interface AlbumDetail extends AlbumSearchResult {
