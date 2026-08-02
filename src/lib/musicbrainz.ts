@@ -177,6 +177,29 @@ function tokensOf(value: string): string[] {
 }
 
 /**
+ * True when the query is this artist and this album and nothing else — "pink
+ * floyd the wall", "who are you the who", in either order.
+ *
+ * This is the strongest statement a search box can make, and it needs to beat
+ * every partial signal: without it, an artist match alone puts the band's whole
+ * discography on equal footing and the album asked for lands mid-list.
+ */
+function namesArtistAndTitle(
+  wanted: string,
+  artist: string,
+  title: string,
+): boolean {
+  if (!artist || !title) return false;
+
+  const remove = (haystack: string, needle: string) =>
+    haystack.includes(needle)
+      ? haystack.replace(needle, " ").replace(/\s+/g, " ").trim()
+      : null;
+
+  return remove(wanted, artist) === title || remove(wanted, title) === artist;
+}
+
+/**
  * MusicBrainz scores by text match alone, which ranks a 2011 compilation the
  * same as the album everyone means. Re-rank on top of its score.
  *
@@ -206,15 +229,27 @@ function relevanceOf(result: AlbumSearchResult, query: string): number {
   const inTitle = new Set(titleTokens);
   const inArtist = new Set(tokensOf(artist));
 
-  if (queryTokens.length && titleTokens.length) {
-    const covered = queryTokens.filter(
+  // Count each distinct word once: bands like The Who repeat words between
+  // their name and their titles, which would otherwise skew coverage.
+  const distinctQueryTokens = [...new Set(queryTokens)];
+
+  if (distinctQueryTokens.length && titleTokens.length) {
+    const covered = distinctQueryTokens.filter(
       (token) => inTitle.has(token) || inArtist.has(token),
     ).length;
-    const asked = titleTokens.filter((token) => wanted.includes(token)).length;
+    score += (covered / distinctQueryTokens.length) * 50;
 
-    score += (covered / queryTokens.length) * 50;
-    score += (asked / titleTokens.length) * 35;
+    // Precision only means something if a title was asked for. When the query
+    // is purely an artist name it would just reward albums that repeat the
+    // band's name — "The Who Sell Out" over "Who's Next" for no good reason.
+    if (artist !== wanted) {
+      const asked = titleTokens.filter((token) => wanted.includes(token)).length;
+      score += (asked / titleTokens.length) * 35;
+    }
   }
+
+  // The query names the artist and the album together. Decisive.
+  if (namesArtistAndTitle(wanted, artist, title)) score += 70;
 
   // Whole-field matches, for when the query is just one or the other. Only
   // exact equality earns this: a prefix bonus double-counts what precision
