@@ -3,6 +3,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+import { readMigrationFiles } from "drizzle-orm/migrator";
 import { eq } from "drizzle-orm";
 
 import * as schema from "./schema";
@@ -25,6 +26,49 @@ export const db = drizzle(sqlite, { schema });
 export { schema };
 
 /**
+ * Adopts a database built by `drizzle-kit push` rather than by migrations.
+ *
+ * Push writes the tables straight from the schema and keeps no journal, so a
+ * database created that way looks brand new to the migrator, which then tries
+ * to CREATE TABLE over the top and fails. Anyone who set the app up before
+ * migrations were applied on boot has exactly that database.
+ *
+ * When the schema is there but the journal isn't, record the existing
+ * migrations as already applied instead of replaying them. Migrations added
+ * later still run: the migrator compares folder timestamps against the newest
+ * recorded one, and these are stamped with their real timestamps.
+ */
+function baselinePushedDatabase(migrationsFolder: string): void {
+  const tableExists = (name: string) =>
+    Boolean(
+      sqlite
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
+        .get(name),
+    );
+
+  // Already migration-managed, or genuinely empty — the migrator handles both.
+  if (tableExists("__drizzle_migrations") || !tableExists("users")) return;
+
+  const migrations = readMigrationFiles({ migrationsFolder });
+  if (migrations.length === 0) return;
+
+  // Same DDL the migrator uses, so it adopts this table as its own.
+  sqlite.exec(
+    "CREATE TABLE IF NOT EXISTS `__drizzle_migrations` (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at numeric)",
+  );
+
+  const record = sqlite.prepare(
+    'INSERT INTO `__drizzle_migrations` ("hash", "created_at") VALUES (?, ?)',
+  );
+  const stampAll = sqlite.transaction(() => {
+    for (const migration of migrations) {
+      record.run(migration.hash, migration.folderMillis);
+    }
+  });
+  stampAll();
+}
+
+/**
  * Bring the database up to date on boot.
  *
  * SQLite here is a file next to the app, not a managed server, so there is no
@@ -34,8 +78,10 @@ export { schema };
  * `npm install && npm run dev`.
  */
 if (!globalForDb.__waxMigrated) {
+  const migrationsFolder = path.join(process.cwd(), "drizzle");
   try {
-    migrate(db, { migrationsFolder: path.join(process.cwd(), "drizzle") });
+    baselinePushedDatabase(migrationsFolder);
+    migrate(db, { migrationsFolder });
     globalForDb.__waxMigrated = true;
   } catch (error) {
     throw new Error(
