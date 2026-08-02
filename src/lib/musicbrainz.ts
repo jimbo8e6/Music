@@ -9,8 +9,12 @@
 
 const MB_BASE = "https://musicbrainz.org/ws/2";
 
+// MusicBrainz accepts a URL or an email here — it only needs a way to reach
+// whoever is running the client. The repo URL is a valid contact on its own, so
+// this default works with no configuration; override it in .env.local to be
+// reachable more directly.
 const CONTACT =
-  process.env.MUSICBRAINZ_CONTACT ?? "https://github.com/jimbo8e6/Music";
+  process.env.MUSICBRAINZ_CONTACT ?? "https://github.com/jimbo8e6/music";
 const USER_AGENT = `Wax/0.1.0 ( ${CONTACT} )`;
 
 /** MusicBrainz allows 1 req/s; 1100ms leaves room for clock jitter. */
