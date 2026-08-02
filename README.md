@@ -117,3 +117,17 @@ instead of several cold instances racing to build it.
 
 **Hosts with a persistent disk** (Fly.io, Railway, a VPS) need none of this.
 Leave the Turso variables unset and the app keeps its SQLite file on the volume.
+
+### Diagnosing a deployment
+
+Next redacts server error messages in production, so a broken deployment shows
+an opaque 500 with nothing to go on. `GET /api/health` answers what the pages
+cannot:
+
+```bash
+curl https://your-app.vercel.app/api/health
+```
+
+It reports which database mode the app resolved, whether each credential is
+present (never its value), and the real connection error if there is one. A
+healthy deployment returns 200 with `"ok": true`.

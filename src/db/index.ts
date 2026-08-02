@@ -1,6 +1,11 @@
 import path from "node:path";
 
-import { createClient, type Client } from "@libsql/client";
+import type { Client } from "@libsql/core/api";
+// The `/web` entry is pure JavaScript. The default entry statically pulls in
+// the native `libsql` bindings for `file:` support, and serverless bundlers
+// routinely fail to ship those `.node` binaries — which takes down every route,
+// since this module is imported by all of them.
+import { createClient as createRemoteClient } from "@libsql/client/web";
 import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
@@ -17,26 +22,86 @@ import * as schema from "./schema";
  * filesystem, which a plain SQLite file cannot survive — hence the remote
  * database in production.
  */
-function resolveConnection(): { url: string; authToken?: string; remote: boolean } {
+interface Connection {
+  url: string;
+  authToken?: string;
+  remote: boolean;
+  /** Set when the configuration cannot work, for a clear error at first use. */
+  problem?: string;
+}
+
+/** True on hosts whose filesystem is read-only and discarded between requests. */
+const IS_SERVERLESS = Boolean(
+  process.env.VERCEL || process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME,
+);
+
+function resolveConnection(): Connection {
   const tursoUrl = process.env.TURSO_DATABASE_URL?.trim();
 
   if (tursoUrl) {
     const authToken = process.env.TURSO_AUTH_TOKEN?.trim();
-    if (!authToken) {
-      throw new Error(
-        "TURSO_DATABASE_URL is set but TURSO_AUTH_TOKEN is missing. Both are needed to reach a hosted Turso database.",
-      );
-    }
-    return { url: tursoUrl, authToken, remote: true };
+    return {
+      url: tursoUrl,
+      authToken,
+      remote: true,
+      problem: authToken
+        ? undefined
+        : "TURSO_DATABASE_URL is set but TURSO_AUTH_TOKEN is missing. Both are needed to reach a hosted Turso database.",
+    };
   }
 
   // Local file. Accept a bare path for convenience and normalise it.
   const raw = process.env.DATABASE_URL?.trim() ?? "file:./wax.db";
   const url = raw.startsWith("file:") ? raw : `file:${raw}`;
-  return { url, remote: false };
+
+  return {
+    url,
+    remote: false,
+    problem: IS_SERVERLESS
+      ? "No hosted database is configured. This host has a read-only, per-request filesystem, so a local SQLite file cannot be used. Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN in the deployment's environment variables and redeploy."
+      : undefined,
+  };
 }
 
 const connection = resolveConnection();
+
+/**
+ * Opens the connection. Remote uses the pure-JS client imported above; a local
+ * file needs the native bindings, required lazily so they are never loaded —
+ * or needed — on a serverless host.
+ */
+function openClient(): Client {
+  if (connection.remote) {
+    return createRemoteClient({
+      url: connection.url,
+      authToken: connection.authToken,
+    });
+  }
+
+  // Reached through process rather than an import: webpack rewrites a
+  // `node:module` import to a stub in this build, and an ordinary import of
+  // @libsql/client would load the native bindings on every host, including the
+  // ones that cannot use them.
+  const getBuiltinModule = (
+    process as NodeJS.Process & {
+      getBuiltinModule?: (id: string) => { createRequire: (from: string) => NodeRequire };
+    }
+  ).getBuiltinModule;
+
+  if (!getBuiltinModule) {
+    throw new Error(
+      "Opening a local database file needs Node 20.16+ or 22.3+. Upgrade Node, or set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN to use a hosted database instead.",
+    );
+  }
+
+  const requireFromApp = getBuiltinModule("module").createRequire(
+    path.join(process.cwd(), "package.json"),
+  );
+  const { createClient } = requireFromApp("@libsql/client") as {
+    createClient: (config: { url: string }) => Client;
+  };
+  return createClient({ url: connection.url });
+}
 
 // Next reloads modules on every edit in dev; without this the process ends up
 // holding dozens of open connections.
@@ -45,9 +110,7 @@ const globalForDb = globalThis as unknown as {
   __waxReady?: Promise<void>;
 };
 
-const client =
-  globalForDb.__waxClient ??
-  createClient({ url: connection.url, authToken: connection.authToken });
+const client = globalForDb.__waxClient ?? openClient();
 
 if (process.env.NODE_ENV !== "production") globalForDb.__waxClient = client;
 
@@ -56,6 +119,29 @@ export { schema };
 
 /** True when talking to a hosted Turso database rather than a local file. */
 export const isRemoteDatabase = connection.remote;
+
+/**
+ * Configuration summary for the health endpoint. Reports whether the secrets
+ * are present, never what they are.
+ */
+export function describeConnection() {
+  let host: string | null = null;
+  try {
+    host = connection.remote ? new URL(connection.url).host : null;
+  } catch {
+    host = "unparseable";
+  }
+
+  return {
+    mode: connection.remote ? ("turso" as const) : ("local-file" as const),
+    serverless: IS_SERVERLESS,
+    host,
+    localPath: connection.remote ? null : connection.url,
+    hasTursoUrl: Boolean(process.env.TURSO_DATABASE_URL?.trim()),
+    hasTursoToken: Boolean(process.env.TURSO_AUTH_TOKEN?.trim()),
+    problem: connection.problem ?? null,
+  };
+}
 
 async function tableExists(name: string): Promise<boolean> {
   const result = await db.get<{ count: number }>(
@@ -106,6 +192,8 @@ async function baselinePushedDatabase(migrationsFolder: string): Promise<void> {
  */
 export function ready(): Promise<void> {
   globalForDb.__waxReady ??= (async () => {
+    if (connection.problem) throw new Error(connection.problem);
+
     const migrationsFolder = path.join(process.cwd(), "drizzle");
     try {
       await baselinePushedDatabase(migrationsFolder);
