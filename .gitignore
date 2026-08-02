@@ -5,12 +5,11 @@ build/
 *.tsbuildinfo
 next-env.d.ts
 
-# local database
+# local database (migrations in drizzle/ are committed — they build the schema)
 *.db
 *.db-journal
 *.db-wal
 *.db-shm
-drizzle/
 
 .env
 .env.local

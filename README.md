@@ -15,9 +15,13 @@ write about it, and keep the whole thing in one dark, artwork-first grid.
 
 ```bash
 npm install
-npm run db:push     # creates ./wax.db from the Drizzle schema
 npm run dev         # http://localhost:3000
 ```
+
+The app applies the migrations in `drizzle/` on startup, so `./wax.db` is
+created for you on first run — there is no setup step. `npm run db:push` is
+still there, but it's for pushing schema edits during development, not for
+getting started.
 
 Optional starter data:
 
@@ -45,6 +49,8 @@ src/
   app/                 routes (App Router, all server components bar the forms)
   components/          AlbumCard, Stars, StarInput, ReviewForm, …
   db/schema.ts         users · albums · entries · watchlist
+  db/index.ts          connection + startup migration + getCurrentUser()
+drizzle/               generated migrations — committed, applied on boot
   lib/musicbrainz.ts   rate-limited API client
   lib/coverart.ts      Cover Art Archive URL building
   lib/queries.ts       reads

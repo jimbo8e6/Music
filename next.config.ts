@@ -14,6 +14,10 @@ const nextConfig: NextConfig = {
     deviceSizes: [640, 750, 828, 1080, 1200],
   },
   serverExternalPackages: ["better-sqlite3"],
+  // Migrations are read from disk at startup, so they have to survive tracing.
+  outputFileTracingIncludes: {
+    "/**": ["./drizzle/**"],
+  },
 };
 
 export default nextConfig;
