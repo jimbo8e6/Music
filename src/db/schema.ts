@@ -54,6 +54,14 @@ export const albums = sqliteTable("albums", {
   tracks: text("tracks", { mode: "json" }).$type<
     { position: number; title: string; lengthMs: number | null; medium: number }[]
   >(),
+  /**
+   * Where to hear it. Null means nobody has looked yet; an empty object means
+   * we looked and MusicBrainz had no streaming links for this release group.
+   */
+  externalUrls: text("external_urls", { mode: "json" }).$type<{
+    spotify?: string;
+    appleMusic?: string;
+  }>(),
   /** Cover Art Archive front image, or null when no art exists upstream. */
   coverArtUrl: text("cover_art_url"),
   /** Null until we have asked CAA at least once; prevents re-asking forever. */

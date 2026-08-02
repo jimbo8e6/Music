@@ -4,7 +4,13 @@ import { and, avg, count, desc, eq, isNotNull, sql } from "drizzle-orm";
 
 import { db, getCurrentUser, schema } from "@/db";
 import type { Album, Entry } from "@/db/schema";
-import { fetchTracklist, lookupAlbum, type Track } from "@/lib/musicbrainz";
+import {
+  fetchExternalLinks,
+  fetchTracklist,
+  lookupAlbum,
+  type ExternalLinks,
+  type Track,
+} from "@/lib/musicbrainz";
 
 export interface EntryWithAlbum {
   entry: Entry;
@@ -41,6 +47,7 @@ export const getOrFetchAlbum = cache(async (id: string): Promise<Album | null> =
       secondaryTypes: detail.secondaryTypes,
       genres: detail.genres,
       primaryReleaseId: detail.primaryReleaseId,
+      externalUrls: detail.externalUrls,
     })
     .onConflictDoUpdate({
       target: albums.id,
@@ -94,6 +101,24 @@ export async function getTracklist(id: string): Promise<AlbumTracklist> {
     tracks: fetched?.tracks ?? [],
     count: fetched?.count ?? album.trackCount ?? null,
   };
+}
+
+/**
+ * Where to hear an album, backfilled once for anything cached before links
+ * were collected. Null means never asked; an empty object means asked and
+ * MusicBrainz had nothing, which is not asked again.
+ */
+export async function getExternalLinks(id: string): Promise<ExternalLinks> {
+  const album = await getAlbum(id);
+  if (!album) return {};
+  if (album.externalUrls !== null) return album.externalUrls;
+  if (!album.mbid) return {};
+
+  const links = await fetchExternalLinks(album.mbid);
+
+  await db.update(albums).set({ externalUrls: links }).where(eq(albums.id, id));
+
+  return links;
 }
 
 /** Just the number, for the album page's metadata line. */

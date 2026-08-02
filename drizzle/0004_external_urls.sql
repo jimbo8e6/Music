@@ -1,0 +1,1 @@
+ALTER TABLE `albums` ADD `external_urls` text;

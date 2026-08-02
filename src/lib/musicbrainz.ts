@@ -553,6 +553,50 @@ function betterOf(a: RankedResult, b: RankedResult): boolean {
   return (a.result.year ?? 9999) < (b.result.year ?? 9999);
 }
 
+export interface ExternalLinks {
+  spotify?: string;
+  appleMusic?: string;
+}
+
+interface MBRelation {
+  url?: { resource?: string };
+}
+
+/**
+ * Streaming links, read straight off MusicBrainz's URL relations.
+ *
+ * Matched on host rather than relation type: contributors file these under
+ * "streaming", "free streaming" and others inconsistently, but the address
+ * itself is unambiguous.
+ */
+export function streamingLinksFrom(
+  relations: MBRelation[] | undefined,
+): ExternalLinks {
+  const links: ExternalLinks = {};
+
+  for (const relation of relations ?? []) {
+    const url = relation.url?.resource;
+    if (!url) continue;
+
+    let host: string;
+    try {
+      host = new URL(url).host.toLowerCase();
+    } catch {
+      continue;
+    }
+
+    if (!links.spotify && host.endsWith("open.spotify.com")) links.spotify = url;
+    if (
+      !links.appleMusic &&
+      (host.endsWith("music.apple.com") || host.endsWith("itunes.apple.com"))
+    ) {
+      links.appleMusic = url;
+    }
+  }
+
+  return links;
+}
+
 export interface AlbumDetail extends AlbumSearchResult {
   genres: string[];
   /**
@@ -562,13 +606,16 @@ export interface AlbumDetail extends AlbumSearchResult {
    * page loads this separately once it is already on screen.
    */
   primaryReleaseId: string | null;
+  externalUrls: ExternalLinks;
 }
 
 /** Everything the album page needs up front, in a single request. */
 export async function lookupAlbum(mbid: string): Promise<AlbumDetail> {
-  const rg = await mbFetch<MBReleaseGroup>(
+  const rg = await mbFetch<MBReleaseGroup & { relations?: MBRelation[] }>(
     `/release-group/${mbid}`,
-    { inc: "artist-credits+releases+genres" },
+    // url-rels rides along on a request we were making anyway, so the streaming
+    // links cost nothing extra.
+    { inc: "artist-credits+releases+genres+url-rels" },
     { cacheMs: CACHE_MS.lookup },
   );
 
@@ -578,7 +625,31 @@ export async function lookupAlbum(mbid: string): Promise<AlbumDetail> {
     .slice(0, 4)
     .map((g) => g.name);
 
-  return { ...base, genres, primaryReleaseId: rg.releases?.[0]?.id ?? null };
+  return {
+    ...base,
+    genres,
+    primaryReleaseId: rg.releases?.[0]?.id ?? null,
+    externalUrls: streamingLinksFrom(rg.relations),
+  };
+}
+
+/**
+ * Streaming links for an album already cached without them.
+ *
+ * Its own request, but a cheap one: the response is cached for a week, and
+ * only albums stored before links were collected ever need it.
+ */
+export async function fetchExternalLinks(mbid: string): Promise<ExternalLinks> {
+  try {
+    const rg = await mbFetch<{ relations?: MBRelation[] }>(
+      `/release-group/${mbid}`,
+      { inc: "artist-credits+releases+genres+url-rels" },
+      { cacheMs: CACHE_MS.lookup },
+    );
+    return streamingLinksFrom(rg.relations);
+  } catch {
+    return {};
+  }
 }
 
 export interface Track {

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 
 import { AlbumSleeve } from "@/components/AlbumSleeve";
+import { PlayLinks } from "@/components/PlayLinks";
 import { Stars } from "@/components/Stars";
 import { deleteEntry, toggleWatchlist } from "@/lib/actions";
 import { backCoverUrl, coverArtUrl } from "@/lib/coverart";
@@ -9,6 +10,7 @@ import { formatDate, formatRelative } from "@/lib/format";
 import { loadAlbumOrNotFound } from "@/lib/loadAlbum";
 import {
   getEntryForAlbum,
+  getExternalLinks,
   getOrFetchAlbum,
   getTrackCount,
   isOnWatchlist,
@@ -75,6 +77,21 @@ export default async function AlbumPage({
                 </button>
               </form>
             )}
+
+            {/* Search links render immediately; the exact album link replaces
+                them if MusicBrainz has one. Same shape either way, so nothing
+                moves when it resolves. */}
+            <Suspense
+              fallback={
+                <PlayLinks links={{}} title={album.title} artist={album.artistName} />
+              }
+            >
+              <ResolvedPlayLinks
+                albumId={album.id}
+                title={album.title}
+                artist={album.artistName}
+              />
+            </Suspense>
           </div>
         </div>
 
@@ -187,4 +204,17 @@ async function TrackCount({ albumId }: { albumId: string }) {
   const count = await getTrackCount(albumId);
   if (!count) return null;
   return <> · {count} tracks</>;
+}
+
+async function ResolvedPlayLinks({
+  albumId,
+  title,
+  artist,
+}: {
+  albumId: string;
+  title: string;
+  artist: string;
+}) {
+  const links = await getExternalLinks(albumId);
+  return <PlayLinks links={links} title={title} artist={artist} />;
 }
