@@ -81,6 +81,104 @@ function escapeLucene(input: string): string {
   return input.replace(/([+\-!(){}[\]^"~*?:\\/]|&&|\|\|)/g, "\\$1");
 }
 
+/** Inside a quoted phrase only the quote and the escape itself need escaping. */
+function escapePhrase(input: string): string {
+  return input.replace(/([\\"])/g, "\\$1");
+}
+
+/**
+ * Builds the Lucene query for a plain search box.
+ *
+ * Two things make the obvious query useless. The release-group index searches
+ * the *title* by default, so "Pink Floyd" looks for albums called "Pink Floyd"
+ * and finds nothing they made. And the default operator is OR, so "The Wall"
+ * matches anything containing "the" — thousands of records, none of them ranked
+ * usefully.
+ *
+ * So: every term has to appear in the title or the artist, and an exact match on
+ * either is boosted hard enough to reach the top.
+ */
+function buildSearchQuery(input: string, types: string[]): string {
+  const terms = input.split(/\s+/).filter(Boolean);
+  const phrase = escapePhrase(input);
+
+  const perTerm = terms
+    .map((term) => {
+      const t = escapeLucene(term);
+      return `(releasegroup:${t} OR artist:${t})`;
+    })
+    .join(" AND ");
+
+  const clauses = [
+    `releasegroup:"${phrase}"^8`,
+    `artist:"${phrase}"^4`,
+    `(${perTerm})`,
+  ];
+
+  const search = `(${clauses.join(" OR ")})`;
+  if (!types.length) return search;
+
+  return `${search} AND primarytype:(${types.join(" OR ")})`;
+}
+
+/**
+ * How far to push a release group down for being a derivative rather than the
+ * record itself. Searching an artist should surface their studio albums, not
+ * forty compilations and a live bootleg.
+ */
+const SECONDARY_TYPE_PENALTY: Record<string, number> = {
+  Compilation: 45,
+  Live: 35,
+  Remix: 40,
+  "DJ-mix": 50,
+  Interview: 70,
+  Demo: 30,
+  Soundtrack: 12,
+  Audiobook: 80,
+  Spokenword: 70,
+  "Audio drama": 80,
+  "Mixtape/Street": 25,
+};
+
+const DEFAULT_SECONDARY_PENALTY = 25;
+
+/** Lowercase, strip punctuation and collapse spaces, for comparing titles. */
+function normalise(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * MusicBrainz scores by text match alone, which ranks a 2011 compilation the
+ * same as the album everyone means. Re-rank on top of its score.
+ */
+function relevanceOf(result: AlbumSearchResult, query: string): number {
+  const wanted = normalise(query);
+  const title = normalise(result.title);
+  const artist = normalise(result.artistName);
+
+  let score = result.score;
+
+  if (title === wanted) score += 60;
+  else if (title.startsWith(wanted)) score += 25;
+
+  // "pink floyd" should bring back everything they made, not just an album of
+  // that name — so an artist match counts nearly as much as a title match.
+  if (artist === wanted) score += 50;
+  else if (wanted.includes(artist) && artist.length > 3) score += 35;
+
+  for (const type of result.secondaryTypes) {
+    score -= SECONDARY_TYPE_PENALTY[type] ?? DEFAULT_SECONDARY_PENALTY;
+  }
+
+  if (result.primaryType === "Album") score += 5;
+
+  return score;
+}
+
 export interface AlbumSearchResult {
   mbid: string;
   title: string;
@@ -158,29 +256,41 @@ export async function searchAlbums(
   const trimmed = query.trim();
   if (!trimmed) return [];
 
-  const clauses = [`(${escapeLucene(trimmed)})`];
-  if (types.length) {
-    clauses.push(`primarytype:(${types.join(" OR ")})`);
-  }
+  // Ask for more than we show: re-ranking can only reorder what it is given,
+  // and the record you want is often outside MusicBrainz's own top 24.
+  const fetchLimit = Math.min(100, Math.max(limit * 3, 50));
 
   const data = await mbFetch<{ "release-groups"?: MBReleaseGroup[] }>(
     "/release-group",
-    { query: clauses.join(" AND "), limit: String(limit) },
+    { query: buildSearchQuery(trimmed, types), limit: String(fetchLimit) },
   );
 
   const groups = data["release-groups"] ?? [];
 
+  const ranked = groups.map((rg) => {
+    const result = toSearchResult(rg);
+    return { result, relevance: relevanceOf(result, trimmed) };
+  });
+
   // MusicBrainz happily returns the same album as several release-groups when
   // reissues were modelled separately; collapse on title+artist, keep the best.
-  const seen = new Map<string, AlbumSearchResult>();
-  for (const rg of groups) {
-    const result = toSearchResult(rg);
-    const key = `${result.title.toLowerCase()}::${result.artistName.toLowerCase()}`;
+  const seen = new Map<string, (typeof ranked)[number]>();
+  for (const candidate of ranked) {
+    const key = `${normalise(candidate.result.title)}::${normalise(candidate.result.artistName)}`;
     const existing = seen.get(key);
-    if (!existing || result.score > existing.score) seen.set(key, result);
+    if (!existing || candidate.relevance > existing.relevance) {
+      seen.set(key, candidate);
+    }
   }
 
-  return [...seen.values()].sort((a, b) => b.score - a.score);
+  return [...seen.values()]
+    .sort((a, b) => {
+      if (b.relevance !== a.relevance) return b.relevance - a.relevance;
+      // Same relevance: the original release beats the reissue.
+      return (a.result.year ?? 9999) - (b.result.year ?? 9999);
+    })
+    .slice(0, limit)
+    .map((candidate) => candidate.result);
 }
 
 export interface AlbumDetail extends AlbumSearchResult {

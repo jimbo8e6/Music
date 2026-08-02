@@ -68,6 +68,7 @@ async function Results({ query }: { query: string }) {
               year={result.year}
               coverUrl={coverArtUrlForMbid(result.mbid, 500)}
               rating={ratings.get(result.mbid) ?? null}
+              badge={result.secondaryTypes[0] ?? null}
               priority={index < 6}
             />
           ))}

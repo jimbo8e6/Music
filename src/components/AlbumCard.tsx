@@ -12,6 +12,8 @@ export interface AlbumCardProps {
   rating?: number | null;
   hasReview?: boolean;
   priority?: boolean;
+  /** e.g. "Live", "Compilation" — omitted for ordinary studio albums. */
+  badge?: string | null;
 }
 
 /**
@@ -28,10 +30,11 @@ export function AlbumCard({
   rating = null,
   hasReview = false,
   priority = false,
+  badge = null,
 }: AlbumCardProps) {
   return (
     <Link href={href} className="group block">
-      <div className="ring-ink-800 group-hover:ring-accent-500/70 rounded-tile overflow-hidden shadow-lg shadow-black/40 ring-1 transition duration-150 group-hover:-translate-y-0.5">
+      <div className="ring-ink-800 group-hover:ring-accent-500/70 rounded-tile relative overflow-hidden shadow-lg shadow-black/40 ring-1 transition duration-150 group-hover:-translate-y-0.5">
         <AlbumArt
           src={coverUrl}
           title={title}
@@ -39,6 +42,12 @@ export function AlbumCard({
           priority={priority}
           sizes="(max-width: 640px) 45vw, (max-width: 1024px) 30vw, 210px"
         />
+
+        {badge && (
+          <span className="bg-ink-950/85 text-mist-300 absolute top-1.5 left-1.5 rounded px-1.5 py-0.5 text-[10px] font-medium tracking-wide uppercase backdrop-blur-sm">
+            {badge}
+          </span>
+        )}
       </div>
 
       <div className="mt-2 space-y-0.5">
