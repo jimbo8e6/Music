@@ -754,6 +754,31 @@ export async function fetchRelease(releaseId: string): Promise<ReleaseDetail> {
   }
 }
 
+/**
+ * Studio albums first released on or after `fromDate` (ISO date: YYYY-MM-DD).
+ * Sorted newest-first. Returns [] gracefully when MusicBrainz is unreachable.
+ */
+export async function fetchNewReleases(
+  fromDate: string,
+  { limit = 12 }: { limit?: number } = {},
+): Promise<AlbumSearchResult[]> {
+  const query = `primarytype:(album) AND -secondarytype:[* TO *] AND firstreleasedate:[${fromDate} TO *]`;
+  try {
+    const groups = await fetchReleaseGroups(query, Math.min(limit * 3, 50));
+    return groups
+      .map(toSearchResult)
+      .filter(r => r.primaryType === "Album" && r.secondaryTypes.length === 0 && r.releaseDate)
+      .sort((a, b) => {
+        if (!a.releaseDate) return 1;
+        if (!b.releaseDate) return -1;
+        return b.releaseDate.localeCompare(a.releaseDate);
+      })
+      .slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* Artists                                                                    */
 /* -------------------------------------------------------------------------- */
