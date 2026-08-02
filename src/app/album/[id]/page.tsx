@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 
 import { AlbumArt } from "@/components/AlbumArt";
 import { Stars } from "@/components/Stars";
@@ -6,7 +7,12 @@ import { deleteEntry, toggleWatchlist } from "@/lib/actions";
 import { coverArtUrl } from "@/lib/coverart";
 import { formatDate, formatRelative } from "@/lib/format";
 import { loadAlbumOrNotFound } from "@/lib/loadAlbum";
-import { getEntryForAlbum, getOrFetchAlbum, isOnWatchlist } from "@/lib/queries";
+import {
+  getEntryForAlbum,
+  getOrFetchAlbum,
+  getTrackCount,
+  isOnWatchlist,
+} from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -34,11 +40,13 @@ export default async function AlbumPage({
     isOnWatchlist(album.id),
   ]);
 
+  // The tracklist needs a second MusicBrainz request, which the rate limiter
+  // has to space a second behind the first. It streams in below instead of
+  // holding up the whole page.
   const meta = [
     album.primaryType,
     ...(album.secondaryTypes ?? []),
     formatDate(album.releaseDate),
-    album.trackCount ? `${album.trackCount} tracks` : null,
   ].filter(Boolean);
 
   return (
@@ -76,7 +84,12 @@ export default async function AlbumPage({
             <h1 className="text-3xl leading-tight font-bold">{album.title}</h1>
             <p className="text-mist-300 text-lg">{album.artistName}</p>
             {meta.length > 0 && (
-              <p className="text-mist-400 text-sm">{meta.join(" · ")}</p>
+              <p className="text-mist-400 text-sm">
+                {meta.join(" · ")}
+                <Suspense fallback={null}>
+                  <TrackCount albumId={album.id} />
+                </Suspense>
+              </p>
             )}
           </header>
 
@@ -159,4 +172,11 @@ export default async function AlbumPage({
       </div>
     </article>
   );
+}
+
+/** Renders nothing at all when MusicBrainz has no tracklist for the release. */
+async function TrackCount({ albumId }: { albumId: string }) {
+  const count = await getTrackCount(albumId);
+  if (!count) return null;
+  return <> · {count} tracks</>;
 }

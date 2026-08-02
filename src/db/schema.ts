@@ -46,6 +46,10 @@ export const albums = sqliteTable("albums", {
   /** JSON array of genre/tag names. */
   genres: text("genres", { mode: "json" }).$type<string[]>(),
   trackCount: integer("track_count"),
+  /** Release to ask for a tracklist; release-groups don't carry one. */
+  primaryReleaseId: text("primary_release_id"),
+  /** Set once the tracklist has been looked up, so a blank isn't retried forever. */
+  trackCountCheckedAt: integer("track_count_checked_at", { mode: "timestamp" }),
   /** Cover Art Archive front image, or null when no art exists upstream. */
   coverArtUrl: text("cover_art_url"),
   /** Null until we have asked CAA at least once; prevents re-asking forever. */

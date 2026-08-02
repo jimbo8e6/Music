@@ -1,8 +1,10 @@
+import { cache } from "react";
+
 import { and, avg, count, desc, eq, isNotNull, sql } from "drizzle-orm";
 
 import { db, getCurrentUser, schema } from "@/db";
 import type { Album, Entry } from "@/db/schema";
-import { lookupAlbum } from "@/lib/musicbrainz";
+import { fetchTrackCount, lookupAlbum } from "@/lib/musicbrainz";
 
 export interface EntryWithAlbum {
   entry: Entry;
@@ -16,7 +18,7 @@ const { albums, entries, watchlist } = schema;
  * Every page that shows an album goes through here, so the local DB fills up
  * with exactly the albums the user cares about and nothing else.
  */
-export async function getOrFetchAlbum(id: string): Promise<Album | null> {
+export const getOrFetchAlbum = cache(async (id: string): Promise<Album | null> => {
   const cached = await getAlbum(id);
   if (cached) return cached;
 
@@ -38,7 +40,7 @@ export async function getOrFetchAlbum(id: string): Promise<Album | null> {
       primaryType: detail.primaryType,
       secondaryTypes: detail.secondaryTypes,
       genres: detail.genres,
-      trackCount: detail.trackCount,
+      primaryReleaseId: detail.primaryReleaseId,
     })
     .onConflictDoUpdate({
       target: albums.id,
@@ -48,6 +50,33 @@ export async function getOrFetchAlbum(id: string): Promise<Album | null> {
     .get();
 
   return inserted ?? null;
+});
+
+/**
+ * Track count, fetched on demand and cached on the album row.
+ *
+ * Kept out of the initial album load deliberately: it needs a second request to
+ * MusicBrainz, and the one-per-second rate limit means asking for it up front
+ * delays the entire page by more than a second. The album page renders first
+ * and streams this in behind it.
+ */
+export async function getTrackCount(id: string): Promise<number | null> {
+  const album = await getAlbum(id);
+  if (!album) return null;
+  if (album.trackCount !== null) return album.trackCount;
+
+  // Already asked and came back empty — don't keep asking on every view.
+  if (album.trackCountCheckedAt) return null;
+  if (!album.primaryReleaseId) return null;
+
+  const count = await fetchTrackCount(album.primaryReleaseId);
+
+  await db
+    .update(albums)
+    .set({ trackCount: count, trackCountCheckedAt: new Date() })
+    .where(eq(albums.id, id));
+
+  return count;
 }
 
 export async function getAlbum(id: string): Promise<Album | undefined> {

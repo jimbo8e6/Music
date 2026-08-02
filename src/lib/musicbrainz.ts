@@ -405,10 +405,16 @@ export async function searchAlbums(
 
 export interface AlbumDetail extends AlbumSearchResult {
   genres: string[];
-  trackCount: number | null;
+  /**
+   * The release to ask for a tracklist. Release-groups don't carry one, and
+   * fetching it here would cost a second request — which the rate limiter must
+   * space a full second after the first, delaying the whole page. The album
+   * page loads this separately once it is already on screen.
+   */
+  primaryReleaseId: string | null;
 }
 
-/** Full detail for one release-group, including a representative tracklist size. */
+/** Everything the album page needs up front, in a single request. */
 export async function lookupAlbum(mbid: string): Promise<AlbumDetail> {
   const rg = await mbFetch<MBReleaseGroup>(`/release-group/${mbid}`, {
     inc: "artist-credits+releases+genres",
@@ -420,17 +426,16 @@ export async function lookupAlbum(mbid: string): Promise<AlbumDetail> {
     .slice(0, 4)
     .map((g) => g.name);
 
-  return { ...base, genres, trackCount: await trackCountFor(rg) };
+  return { ...base, genres, primaryReleaseId: rg.releases?.[0]?.id ?? null };
 }
 
 /**
- * Release-groups don't carry a tracklist, so we look at the first release under
- * the group. Best-effort: a missing count is not worth failing the page over.
+ * Total tracks across every medium of a release.
+ *
+ * Best-effort: a missing count is not worth failing the page over, so this
+ * returns null rather than throwing.
  */
-async function trackCountFor(rg: MBReleaseGroup): Promise<number | null> {
-  const releaseId = rg.releases?.[0]?.id;
-  if (!releaseId) return null;
-
+export async function fetchTrackCount(releaseId: string): Promise<number | null> {
   try {
     const release = await mbFetch<{ media?: { "track-count"?: number }[] }>(
       `/release/${releaseId}`,
