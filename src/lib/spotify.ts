@@ -157,12 +157,12 @@ function toAlbumResult(album: RawSpotifyAlbum): SpotifyAlbumResult {
 
 export async function searchSpotifyAlbums(
   query: string,
-  { limit = 24 }: { limit?: number } = {},
+  { limit = 20 }: { limit?: number } = {},
 ): Promise<SpotifyAlbumResult[]> {
   if (!query.trim()) return [];
   const data = await spotifyFetch<{ albums: { items: RawSpotifyAlbum[] } }>(
     "/search",
-    { q: query.trim(), type: "album", limit: String(Math.min(limit, 50)) },
+    { q: query.trim(), type: "album", limit: String(Math.min(limit, 20)) },
   );
   return (data.albums?.items ?? []).map(toAlbumResult);
 }
@@ -205,12 +205,12 @@ function toArtistResult(artist: RawSpotifyArtist): SpotifyArtistResult {
 
 export async function searchSpotifyArtists(
   query: string,
-  { limit = 25 }: { limit?: number } = {},
+  { limit = 20 }: { limit?: number } = {},
 ): Promise<SpotifyArtistResult[]> {
   if (!query.trim()) return [];
   const data = await spotifyFetch<{ artists: { items: RawSpotifyArtist[] } }>(
     "/search",
-    { q: query.trim(), type: "artist", limit: String(Math.min(limit, 50)) },
+    { q: query.trim(), type: "artist", limit: String(Math.min(limit, 20)) },
   );
   return (data.artists?.items ?? []).map(toArtistResult);
 }
@@ -294,7 +294,7 @@ export async function getSpotifyArtist(id: string): Promise<SpotifyArtistDetail>
 export async function getSpotifyArtistAlbums(
   artistId: string,
   {
-    limit = 50,
+    limit = 20,
     includeGroups = "album,single,compilation",
   }: { limit?: number; includeGroups?: string } = {},
 ): Promise<SpotifyAlbumResult[]> {
@@ -303,7 +303,7 @@ export async function getSpotifyArtistAlbums(
       `/artists/${artistId}/albums`,
       {
         include_groups: includeGroups,
-        limit: String(Math.min(limit, 50)),
+        limit: String(Math.min(limit, 20)),
         market: "US",
       },
       LOOKUP_CACHE_MS,
