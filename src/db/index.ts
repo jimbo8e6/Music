@@ -1,5 +1,6 @@
 import path from "node:path";
 
+import { cookies, headers } from "next/headers";
 import type { Client } from "@libsql/core/api";
 // The `/web` entry is pure JavaScript. The default entry statically pulls in
 // the native `libsql` bindings for `file:` support, and serverless bundlers
@@ -231,21 +232,36 @@ export function ready(): Promise<void> {
   return globalForDb.__waxReady;
 }
 
-/** The single local account. Swap this for a session lookup to go multi-user. */
+/** Fallback used only when no session cookie exists (e.g. server actions called outside a request). */
 export const LOCAL_USER_ID = "local";
 
 /**
- * Resolves the acting user. Single-user for now, so it always returns the local
- * account, creating it on first run. When accounts land, this becomes a session
- * lookup and nothing downstream changes — every query already filters by userId.
+ * Resolves the acting user from the browser's session cookie.
+ * Each browser gets its own UUID (set by middleware), so data is
+ * isolated per device with no login required.
  */
 export async function getCurrentUser(): Promise<schema.User> {
   await ready();
 
+  // Cookie is the normal path; the x-wax-session header covers the very
+  // first render before the Set-Cookie response lands on the client.
+  let userId: string;
+  try {
+    const cookieStore = await cookies();
+    const headerStore = await headers();
+    userId =
+      cookieStore.get("wax_session")?.value ??
+      headerStore.get("x-wax-session") ??
+      LOCAL_USER_ID;
+  } catch {
+    // Outside a request context (e.g. build-time or test) — use fallback.
+    userId = LOCAL_USER_ID;
+  }
+
   const existing = await db
     .select()
     .from(schema.users)
-    .where(eq(schema.users.id, LOCAL_USER_ID))
+    .where(eq(schema.users.id, userId))
     .get();
 
   if (existing) return existing;
@@ -256,7 +272,7 @@ export async function getCurrentUser(): Promise<schema.User> {
   await db
     .insert(schema.users)
     .values({
-      id: LOCAL_USER_ID,
+      id: userId,
       username: "you",
       displayName: "You",
       bio: null,
@@ -267,7 +283,7 @@ export async function getCurrentUser(): Promise<schema.User> {
   const user = await db
     .select()
     .from(schema.users)
-    .where(eq(schema.users.id, LOCAL_USER_ID))
+    .where(eq(schema.users.id, userId))
     .get();
 
   if (!user) {
