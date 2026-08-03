@@ -183,7 +183,7 @@ async function ArtistResults({ query }: { query: string }) {
 
 async function AlbumResults({ query }: { query: string }) {
   try {
-    const results = await searchSpotifyAlbums(query, { limit: 20 });
+    const results = await searchSpotifyAlbums(query);
 
     if (results.length === 0) {
       return (
