@@ -147,16 +147,11 @@ export async function searchSpotifyAlbums(
   { limit = 24 }: { limit?: number } = {},
 ): Promise<SpotifyAlbumResult[]> {
   if (!query.trim()) return [];
-  try {
-    const data = await spotifyFetch<{ albums: { items: RawSpotifyAlbum[] } }>(
-      "/search",
-      { q: query.trim(), type: "album", limit: String(Math.min(limit, 50)) },
-    );
-    return (data.albums?.items ?? []).map(toAlbumResult);
-  } catch (err) {
-    console.error("[spotify] Album search failed:", err);
-    return [];
-  }
+  const data = await spotifyFetch<{ albums: { items: RawSpotifyAlbum[] } }>(
+    "/search",
+    { q: query.trim(), type: "album", limit: String(Math.min(limit, 50)) },
+  );
+  return (data.albums?.items ?? []).map(toAlbumResult);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -200,16 +195,11 @@ export async function searchSpotifyArtists(
   { limit = 25 }: { limit?: number } = {},
 ): Promise<SpotifyArtistResult[]> {
   if (!query.trim()) return [];
-  try {
-    const data = await spotifyFetch<{ artists: { items: RawSpotifyArtist[] } }>(
-      "/search",
-      { q: query.trim(), type: "artist", limit: String(Math.min(limit, 50)) },
-    );
-    return (data.artists?.items ?? []).map(toArtistResult);
-  } catch (err) {
-    console.error("[spotify] Artist search failed:", err);
-    return [];
-  }
+  const data = await spotifyFetch<{ artists: { items: RawSpotifyArtist[] } }>(
+    "/search",
+    { q: query.trim(), type: "artist", limit: String(Math.min(limit, 50)) },
+  );
+  return (data.artists?.items ?? []).map(toArtistResult);
 }
 
 /* -------------------------------------------------------------------------- */
