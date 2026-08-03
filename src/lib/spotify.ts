@@ -26,10 +26,13 @@ export class SpotifyError extends Error {
 
 async function getToken(): Promise<string> {
   const cached = await readCache(TOKEN_CACHE_KEY, TOKEN_TTL_MS);
-  if (cached !== null) return (cached as { access_token: string }).access_token;
+  if (cached !== null) {
+    const token = (cached as { access_token?: string }).access_token;
+    if (token) return token;
+  }
 
-  const clientId = process.env.SPOTIFY_CLIENT_ID;
-  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
+  const clientId = process.env.SPOTIFY_CLIENT_ID?.trim();
+  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET?.trim();
   if (!clientId || !clientSecret) {
     throw new SpotifyError(
       "Spotify credentials missing — add SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET to .env.local",
@@ -48,10 +51,17 @@ async function getToken(): Promise<string> {
   });
 
   if (!res.ok) {
-    throw new SpotifyError(`Spotify auth failed: HTTP ${res.status}`, res.status);
+    const body = await res.text().catch(() => "");
+    throw new SpotifyError(
+      `Spotify auth failed: HTTP ${res.status}${body ? ` — ${body}` : ""}`,
+      res.status,
+    );
   }
 
   const data = (await res.json()) as { access_token: string; expires_in: number };
+  if (!data.access_token) {
+    throw new SpotifyError("Spotify token response missing access_token");
+  }
   await writeCache(TOKEN_CACHE_KEY, data);
   return data.access_token;
 }
@@ -75,7 +85,10 @@ async function spotifyFetch<T>(
   });
 
   if (res.status === 404) throw new SpotifyError("Not found on Spotify", 404);
-  if (!res.ok) throw new SpotifyError(`Spotify responded ${res.status}`, res.status);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new SpotifyError(`Spotify responded ${res.status}${body ? ` — ${body}` : ""}`, res.status);
+  }
 
   const data = (await res.json()) as T;
   await writeCache(cacheKey, data);
