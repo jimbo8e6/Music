@@ -25,13 +25,13 @@ const MODES: { key: SearchMode; label: string; placeholder: string; hint: string
     key: "albums",
     label: "Albums",
     placeholder: "Album title…",
-    hint: "Powered by Spotify — every result has artwork and is an official release.",
+    hint: "Powered by Spotify",
   },
   {
     key: "artists",
     label: "Artists",
     placeholder: "Artist or band name…",
-    hint: "Find the artist, then browse everything they released.",
+    hint: "Powered by Spotify",
   },
 ];
 
