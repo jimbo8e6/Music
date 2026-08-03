@@ -27,13 +27,13 @@ export default function RootLayout({
             className="hover:text-mist-100 underline underline-offset-2"
           >
             MusicBrainz
-          </a>
-          , artwork from the{" "}
+          </a>{" "}
+          and{" "}
           <a
-            href="https://coverartarchive.org"
+            href="https://spotify.com"
             className="hover:text-mist-100 underline underline-offset-2"
           >
-            Cover Art Archive
+            Spotify
           </a>
           .
         </footer>

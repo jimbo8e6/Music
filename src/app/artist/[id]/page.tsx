@@ -7,7 +7,6 @@ import { AlbumCard } from "@/components/AlbumCard";
 import { AlbumGridSkeleton } from "@/components/AlbumGridSkeleton";
 import { activeYears } from "@/components/ArtistCard";
 import { db, getCurrentUser, schema } from "@/db";
-import { coverArtUrlForMbid } from "@/lib/coverart";
 import {
   MusicBrainzError,
   getArtistReleaseGroups,
@@ -16,6 +15,14 @@ import {
   type AlbumSearchResult,
   type ReleaseSection,
 } from "@/lib/musicbrainz";
+import {
+  SpotifyError,
+  getSpotifyArtist,
+  getSpotifyArtistAlbums,
+  isSpotifyId,
+  type SpotifyAlbumResult,
+} from "@/lib/spotify";
+import { coverArtUrlForMbid } from "@/lib/coverart";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +32,10 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  if (isSpotifyId(id)) {
+    const artist = await getSpotifyArtist(id).catch(() => null);
+    return { title: artist ? artist.name : "Artist" };
+  }
   const artist = await lookupArtist(id).catch(() => null);
   return { title: artist ? artist.name : "Artist" };
 }
@@ -36,6 +47,119 @@ export default async function ArtistPage({
 }) {
   const { id } = await params;
 
+  if (isSpotifyId(id)) {
+    return <SpotifyArtistPage id={id} />;
+  }
+  return <MbArtistPage id={id} />;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Spotify artist page                                                         */
+/* -------------------------------------------------------------------------- */
+
+async function SpotifyArtistPage({ id }: { id: string }) {
+  let artist;
+  try {
+    artist = await getSpotifyArtist(id);
+  } catch (error) {
+    if (error instanceof SpotifyError && error.status === 404) notFound();
+    throw error;
+  }
+
+  return (
+    <div className="space-y-8">
+      <header className="space-y-2">
+        <h1 className="text-3xl leading-tight font-bold">{artist.name}</h1>
+        {artist.genres.length > 0 && (
+          <ul className="flex flex-wrap gap-2 pt-1">
+            {artist.genres.map((genre) => (
+              <li
+                key={genre}
+                className="border-ink-700 text-mist-300 rounded-full border px-3 py-1 text-xs"
+              >
+                {genre}
+              </li>
+            ))}
+          </ul>
+        )}
+      </header>
+
+      <Suspense fallback={<DiscographySkeleton />}>
+        <SpotifyDiscography artistId={id} />
+      </Suspense>
+    </div>
+  );
+}
+
+const SPOTIFY_SECTION_ORDER = ["Albums", "Singles & EPs", "Compilations"] as const;
+type SpotifySection = (typeof SPOTIFY_SECTION_ORDER)[number];
+
+function spotifySectionOf(album: SpotifyAlbumResult): SpotifySection {
+  if (album.albumType === "compilation") return "Compilations";
+  if (album.albumType === "single") return "Singles & EPs";
+  return "Albums";
+}
+
+async function SpotifyDiscography({ artistId }: { artistId: string }) {
+  const albums = await getSpotifyArtistAlbums(artistId);
+
+  if (albums.length === 0) {
+    return (
+      <p className="text-mist-400 text-sm">No releases found for this artist.</p>
+    );
+  }
+
+  const ratings = await ratingsFor(albums.map((a) => a.spotifyId));
+
+  const sections = new Map<SpotifySection, SpotifyAlbumResult[]>();
+  for (const album of albums) {
+    const section = spotifySectionOf(album);
+    const bucket = sections.get(section) ?? [];
+    bucket.push(album);
+    sections.set(section, bucket);
+  }
+
+  return (
+    <div className="space-y-10">
+      {SPOTIFY_SECTION_ORDER.filter((s) => sections.has(s)).map((section) => {
+        const releases = sections.get(section)!;
+        return (
+          <section key={section} className="space-y-4">
+            <div className="border-ink-800 flex items-baseline justify-between border-b pb-2">
+              <h2 className="text-mist-400 text-xs font-semibold tracking-wider uppercase">
+                {section}
+              </h2>
+              <span className="text-mist-400 text-xs tabular-nums">
+                {releases.length}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-6">
+              {releases.map((album, index) => (
+                <AlbumCard
+                  key={album.spotifyId}
+                  href={`/album/${album.spotifyId}`}
+                  title={album.title}
+                  artist={album.artistName}
+                  year={album.year}
+                  coverUrl={album.artworkUrl}
+                  rating={ratings.get(album.spotifyId) ?? null}
+                  priority={section === "Albums" && index < 6}
+                />
+              ))}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* MusicBrainz artist page (existing library albums)                          */
+/* -------------------------------------------------------------------------- */
+
+async function MbArtistPage({ id }: { id: string }) {
   let artist;
   try {
     artist = await lookupArtist(id);
@@ -75,10 +199,8 @@ export default async function ArtistPage({
         )}
       </header>
 
-      {/* The discography is a second request. The header is already useful, so
-          it goes out first rather than waiting behind it. */}
       <Suspense fallback={<DiscographySkeleton />}>
-        <Discography artistMbid={artist.mbid} />
+        <MbDiscography artistMbid={artist.mbid} />
       </Suspense>
 
       <p className="text-mist-400 text-xs">
@@ -95,19 +217,7 @@ export default async function ArtistPage({
   );
 }
 
-function DiscographySkeleton() {
-  return (
-    <section className="space-y-4" aria-live="polite">
-      <p className="text-mist-400 text-xs tracking-wider uppercase">
-        Loading releases…
-      </p>
-      <AlbumGridSkeleton />
-    </section>
-  );
-}
-
-/** Section order on the page: the records first, the derivatives after. */
-const SECTION_ORDER: ReleaseSection[] = [
+const MB_SECTION_ORDER: ReleaseSection[] = [
   "Albums",
   "EPs",
   "Live",
@@ -115,7 +225,7 @@ const SECTION_ORDER: ReleaseSection[] = [
   "Other",
 ];
 
-async function Discography({ artistMbid }: { artistMbid: string }) {
+async function MbDiscography({ artistMbid }: { artistMbid: string }) {
   const { releaseGroups, total } = await getArtistReleaseGroups(artistMbid);
 
   if (releaseGroups.length === 0) {
@@ -138,7 +248,7 @@ async function Discography({ artistMbid }: { artistMbid: string }) {
 
   return (
     <div className="space-y-10">
-      {SECTION_ORDER.filter((section) => sections.has(section)).map((section) => {
+      {MB_SECTION_ORDER.filter((section) => sections.has(section)).map((section) => {
         const releases = sections.get(section)!;
         return (
           <section key={section} className="space-y-4">
@@ -171,14 +281,24 @@ async function Discography({ artistMbid }: { artistMbid: string }) {
 
       {total > releaseGroups.length && (
         <p className="text-mist-400 text-xs">
-          Showing {releaseGroups.length} of {total} releases MusicBrainz lists.
+          Showing {releaseGroups.length} of {total} releases.
         </p>
       )}
     </div>
   );
 }
 
-/** Ratings the user has already given anything in this discography. */
+function DiscographySkeleton() {
+  return (
+    <section className="space-y-4" aria-live="polite">
+      <p className="text-mist-400 text-xs tracking-wider uppercase">
+        Loading releases…
+      </p>
+      <AlbumGridSkeleton />
+    </section>
+  );
+}
+
 async function ratingsFor(ids: string[]): Promise<Map<string, number | null>> {
   if (ids.length === 0) return new Map();
 

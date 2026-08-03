@@ -150,6 +150,13 @@ async function tableExists(name: string): Promise<boolean> {
   return Number(result?.count ?? 0) > 0;
 }
 
+async function columnExists(table: string, column: string): Promise<boolean> {
+  const result = await db.get<{ count: number }>(
+    sql`SELECT count(*) as count FROM pragma_table_info(${table}) WHERE name = ${column}`,
+  );
+  return Number(result?.count ?? 0) > 0;
+}
+
 /**
  * Adopts a database built by `drizzle-kit push` rather than by migrations.
  *
@@ -198,6 +205,12 @@ export function ready(): Promise<void> {
     try {
       await baselinePushedDatabase(migrationsFolder);
       await migrate(db, { migrationsFolder });
+
+      // Safety: if the DB was baselined from a db:push that predated this
+      // column, the migration was marked as applied without running the DDL.
+      if (!(await columnExists("albums", "artist_spotify_id"))) {
+        await db.run(sql`ALTER TABLE albums ADD artist_spotify_id text`);
+      }
     } catch (error) {
       // Serverless starts several instances at once, so two can race to apply
       // the first migration and the loser fails on "table already exists".

@@ -9,15 +9,11 @@ import { ArtistCard } from "@/components/ArtistCard";
 import { EmptyState } from "@/components/EmptyState";
 import { SearchBox } from "@/components/SearchBox";
 import { db, getCurrentUser, schema } from "@/db";
-import { coverArtUrlForMbid } from "@/lib/coverart";
 import {
-  ALBUM_FILTERS,
-  MusicBrainzError,
-  isAlbumFilter,
-  searchAlbums,
-  searchArtists,
-  type AlbumFilter,
-} from "@/lib/musicbrainz";
+  searchSpotifyAlbums,
+  searchSpotifyArtists,
+  SpotifyError,
+} from "@/lib/spotify";
 
 export const metadata = { title: "Search" };
 export const dynamic = "force-dynamic";
@@ -29,7 +25,7 @@ const MODES: { key: SearchMode; label: string; placeholder: string; hint: string
     key: "albums",
     label: "Albums",
     placeholder: "Album title…",
-    hint: "Studio albums by default. Widen it with the filters if you want live records, compilations or EPs.",
+    hint: "Powered by Spotify — every result has artwork and is an official release.",
   },
   {
     key: "artists",
@@ -42,12 +38,11 @@ const MODES: { key: SearchMode; label: string; placeholder: string; hint: string
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; type?: string; filter?: string }>;
+  searchParams: Promise<{ q?: string; type?: string }>;
 }) {
-  const { q, type, filter } = await searchParams;
+  const { q, type } = await searchParams;
   const query = q?.trim() ?? "";
   const mode: SearchMode = type === "artists" ? "artists" : "albums";
-  const albumFilter: AlbumFilter = isAlbumFilter(filter) ? filter : "studio";
   const config = MODES.find((m) => m.key === mode)!;
 
   return (
@@ -87,47 +82,19 @@ export default async function SearchPage({
           placeholder={config.placeholder}
           variant="prominent"
           mode={mode}
-          filter={albumFilter}
         />
         <p className="text-mist-400 text-center text-xs">{config.hint}</p>
       </div>
 
-      {mode === "albums" && (
-        <div className="flex flex-wrap justify-center gap-2">
-          {(Object.keys(ALBUM_FILTERS) as AlbumFilter[]).map((key) => {
-            const active = key === albumFilter;
-            const params = new URLSearchParams();
-            if (query) params.set("q", query);
-            if (key !== "studio") params.set("filter", key);
-            return (
-              <Link
-                key={key}
-                href={`/search?${params}`}
-                aria-current={active ? "true" : undefined}
-                className={
-                  active
-                    ? "border-accent-500 text-accent-400 rounded-full border px-3 py-1 text-xs font-medium"
-                    : "border-ink-700 text-mist-400 hover:border-ink-600 hover:text-mist-100 rounded-full border px-3 py-1 text-xs transition-colors"
-                }
-              >
-                {ALBUM_FILTERS[key].label}
-              </Link>
-            );
-          })}
-        </div>
-      )}
-
       {query ? (
-        // Keyed on both, so switching tab or query returns to the skeleton
-        // rather than leaving the previous answer on screen.
         <Suspense
-          key={`${mode}:${albumFilter}:${query}`}
+          key={`${mode}:${query}`}
           fallback={<SearchingNotice query={query} mode={mode} />}
         >
           {mode === "artists" ? (
             <ArtistResults query={query} />
           ) : (
-            <AlbumResults query={query} filter={albumFilter} />
+            <AlbumResults query={query} />
           )}
         </Suspense>
       ) : null}
@@ -139,7 +106,7 @@ function SearchingNotice({ query, mode }: { query: string; mode: SearchMode }) {
   return (
     <section className="space-y-4" aria-live="polite">
       <p className="text-mist-400 text-xs tracking-wider uppercase">
-        Searching MusicBrainz for “{query}”…
+        Searching for &ldquo;{query}&rdquo;…
       </p>
       {mode === "albums" ? <AlbumGridSkeleton /> : <ArtistListSkeleton />}
     </section>
@@ -164,9 +131,9 @@ function ArtistListSkeleton() {
 
 function UpstreamError({ error }: { error: unknown }) {
   const message =
-    error instanceof MusicBrainzError
+    error instanceof SpotifyError
       ? error.message
-      : "Couldn't reach MusicBrainz. Check your connection and try again.";
+      : "Couldn't reach Spotify. Check your connection and try again.";
 
   return (
     <div
@@ -180,13 +147,13 @@ function UpstreamError({ error }: { error: unknown }) {
 
 async function ArtistResults({ query }: { query: string }) {
   try {
-    const artists = await searchArtists(query);
+    const artists = await searchSpotifyArtists(query);
 
     if (artists.length === 0) {
       return (
         <EmptyState
-          title={`No artists found for “${query}”`}
-          body="Try the spelling MusicBrainz files them under, or drop “The”."
+          title={`No artists found for "${query}"`}
+          body="Try an alternate spelling or the full name."
         />
       );
     }
@@ -198,7 +165,13 @@ async function ArtistResults({ query }: { query: string }) {
         </p>
         <div className="space-y-2">
           {artists.map((artist) => (
-            <ArtistCard key={artist.mbid} artist={artist} />
+            <ArtistCard
+              key={artist.spotifyId}
+              href={`/artist/${artist.spotifyId}`}
+              name={artist.name}
+              imageUrl={artist.artworkUrl}
+              meta={artist.genres.slice(0, 3).join(" · ") || null}
+            />
           ))}
         </div>
       </section>
@@ -208,45 +181,28 @@ async function ArtistResults({ query }: { query: string }) {
   }
 }
 
-async function AlbumResults({
-  query,
-  filter,
-}: {
-  query: string;
-  filter: AlbumFilter;
-}) {
+async function AlbumResults({ query }: { query: string }) {
   try {
-    const results = await searchAlbums(query, { filter });
+    const results = await searchSpotifyAlbums(query);
 
     if (results.length === 0) {
-      const studio = filter === "studio";
       return (
         <EmptyState
-          title={`No ${ALBUM_FILTERS[filter].label.toLowerCase()} found for “${query}”`}
-          body={
-            studio
-              ? "Only studio albums are shown by default. It may be a live record, an EP or a compilation — try widening the filter above."
-              : "MusicBrainz indexes by exact-ish spelling. Try dropping punctuation and subtitles, or look the artist up and browse their releases."
-          }
-          actionHref={
-            studio
-              ? `/search?q=${encodeURIComponent(query)}&filter=all`
-              : `/search?q=${encodeURIComponent(query)}&type=artists`
-          }
-          actionLabel={studio ? "Search everything" : "Search artists instead"}
+          title={`No albums found for "${query}"`}
+          body="Try searching by artist name instead."
+          actionHref={`/search?q=${encodeURIComponent(query)}&type=artists`}
+          actionLabel="Search artists"
         />
       );
     }
 
-    // One query tells us which of these are already in the library, so cards
-    // can show the rating the user already gave.
-    const ratings = await ratingsFor(results.map((result) => result.mbid));
+    const ratings = await ratingsFor(results.map((r) => r.spotifyId));
 
     return (
       <section className="space-y-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <p className="text-mist-400 text-xs tracking-wider uppercase">
-            {results.length} {ALBUM_FILTERS[filter].label.toLowerCase()}
+            {results.length} result{results.length === 1 ? "" : "s"}
           </p>
           <Link
             href={`/search?q=${encodeURIComponent(query)}&type=artists`}
@@ -259,14 +215,14 @@ async function AlbumResults({
         <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-6">
           {results.map((result, index) => (
             <AlbumCard
-              key={result.mbid}
-              href={`/album/${result.mbid}`}
+              key={result.spotifyId}
+              href={`/album/${result.spotifyId}`}
               title={result.title}
               artist={result.artistName}
               year={result.year}
-              coverUrl={coverArtUrlForMbid(result.mbid, 500)}
-              rating={ratings.get(result.mbid) ?? null}
-              badge={result.secondaryTypes[0] ?? null}
+              coverUrl={result.artworkUrl}
+              rating={ratings.get(result.spotifyId) ?? null}
+              badge={result.albumType !== "album" ? capitalise(result.albumType) : null}
               priority={index < 6}
             />
           ))}
@@ -278,7 +234,10 @@ async function AlbumResults({
   }
 }
 
-/** Existing ratings for these album ids, keyed by id. */
+function capitalise(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 async function ratingsFor(ids: string[]): Promise<Map<string, number | null>> {
   if (ids.length === 0) return new Map();
 

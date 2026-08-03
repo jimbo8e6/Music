@@ -130,7 +130,7 @@ function TrackPanel({ load }: { load: Load }) {
   if (load.state === "error" || load.tracks.length === 0) {
     return (
       <div className="text-mist-400 flex h-full items-center justify-center px-6 text-center text-xs">
-        MusicBrainz has no tracklist for this release.
+        No tracklist available for this release.
       </div>
     );
   }

@@ -8,6 +8,10 @@ const nextConfig: NextConfig = {
       // ...but redirects to an Internet Archive node for the actual bytes.
       { protocol: "https", hostname: "*.archive.org" },
       { protocol: "https", hostname: "archive.org" },
+      // Spotify album and artist artwork
+      { protocol: "https", hostname: "i.scdn.co" },
+      // Apple Music RSS feed artwork (mzstatic CDN)
+      { protocol: "https", hostname: "*.mzstatic.com" },
     ],
     // Artwork is square; these are the widths the grid and detail page ask for.
     imageSizes: [96, 128, 192, 256, 384],

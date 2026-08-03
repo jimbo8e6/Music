@@ -62,7 +62,9 @@ export const albums = sqliteTable("albums", {
     spotify?: string;
     appleMusic?: string;
   }>(),
-  /** Cover Art Archive front image, or null when no art exists upstream. */
+  /** Spotify artist ID, populated for albums sourced via Spotify. */
+  artistSpotifyId: text("artist_spotify_id"),
+  /** Cover Art Archive front image, Spotify CDN URL, or null. */
   coverArtUrl: text("cover_art_url"),
   /** Null until we have asked CAA at least once; prevents re-asking forever. */
   coverArtCheckedAt: integer("cover_art_checked_at", { mode: "timestamp" }),

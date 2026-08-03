@@ -36,6 +36,13 @@
       "when": 1785684998337,
       "tag": "0004_external_urls",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1754236800000,
+      "tag": "0005_spotify",
+      "breakpoints": true
     }
   ]
 }

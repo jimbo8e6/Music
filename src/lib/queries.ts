@@ -1,17 +1,20 @@
 import { cache } from "react";
 
-import { and, avg, count, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, avg, count, desc, eq, gt, isNotNull, sql } from "drizzle-orm";
 
 import { db, getCurrentUser, schema } from "@/db";
 import type { Album, Entry } from "@/db/schema";
 import {
   fetchExternalLinks,
   fetchRelease,
+  getArtistReleaseGroups,
   lookupAlbum,
   mergeLinks,
+  type AlbumSearchResult,
   type ExternalLinks,
   type Track,
 } from "@/lib/musicbrainz";
+import { getSpotifyAlbum, isSpotifyId } from "@/lib/spotify";
 
 export interface EntryWithAlbum {
   entry: Entry;
@@ -29,9 +32,58 @@ export const getOrFetchAlbum = cache(async (id: string): Promise<Album | null> =
   const cached = await getAlbum(id);
   if (cached) return cached;
 
-  // Only MBIDs are resolvable upstream; `local-…` ids must already exist.
+  // local-* entries must already exist in the DB
   if (id.startsWith("local-")) return null;
 
+  // Spotify IDs (22-char base-62): fetch from Spotify
+  if (isSpotifyId(id)) {
+    const detail = await getSpotifyAlbum(id);
+
+    // Map Spotify album_type to primaryType/secondaryTypes the app understands
+    let primaryType = "Album";
+    let secondaryTypes: string[] = [];
+    if (detail.albumType === "single") {
+      primaryType = "Single";
+    } else if (detail.albumType === "compilation") {
+      primaryType = "Album";
+      secondaryTypes = ["Compilation"];
+    }
+
+    const inserted = await db
+      .insert(albums)
+      .values({
+        id,
+        mbid: null,
+        title: detail.title,
+        artistName: detail.artistName,
+        artistMbid: null,
+        artistSpotifyId: detail.artistSpotifyId,
+        releaseDate: detail.releaseDate,
+        year: detail.year,
+        primaryType,
+        secondaryTypes,
+        genres: detail.genres,
+        trackCount: detail.trackCount,
+        primaryReleaseId: null,
+        tracks: detail.tracks,
+        externalUrls: detail.spotifyUrl ? { spotify: detail.spotifyUrl } : {},
+        coverArtUrl: detail.artworkUrl,
+      })
+      .onConflictDoUpdate({
+        target: albums.id,
+        set: {
+          title: detail.title,
+          artistName: detail.artistName,
+          coverArtUrl: detail.artworkUrl,
+        },
+      })
+      .returning()
+      .get();
+
+    return inserted ?? null;
+  }
+
+  // Default: MusicBrainz MBID
   const detail = await lookupAlbum(id);
 
   const inserted = await db
@@ -264,4 +316,97 @@ export async function isOnWatchlist(albumId: string): Promise<boolean> {
     .where(and(eq(watchlist.userId, user.id), eq(watchlist.albumId, albumId)))
     .get();
   return Boolean(row);
+}
+
+/**
+ * Albums the user probably wants to hear next.
+ *
+ * Two sources, merged and deduplicated:
+ *   1. Albums browsed recently (in the local cache within the last 14 days)
+ *      but not yet logged — these are the ones the user looked at and didn't
+ *      add yet, so they're clearly on the radar.
+ *   2. Albums by the user's highest-rated artists that aren't in the library.
+ *      Fetches artist discographies from MusicBrainz if the local cache doesn't
+ *      have enough — those responses are cached for 7 days so after the first
+ *      hit the page is fast.
+ */
+export interface HomeRecommendation extends AlbumSearchResult {
+  coverArtUrl: string | null;
+}
+
+export async function getHomeRecommendations({
+  limit = 12,
+}: { limit?: number } = {}): Promise<HomeRecommendation[]> {
+  const user = await getCurrentUser();
+
+  const loggedRows = await db
+    .select({ albumId: entries.albumId })
+    .from(entries)
+    .where(eq(entries.userId, user.id));
+  const loggedIds = new Set(loggedRows.map(r => r.albumId));
+
+  // 1. Albums browsed in the last 14 days, not yet logged.
+  const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+  const recentlyBrowsed: HomeRecommendation[] = (await db
+    .select()
+    .from(albums)
+    .where(and(eq(albums.primaryType, "Album"), gt(albums.cachedAt, twoWeeksAgo)))
+    .orderBy(desc(albums.cachedAt))
+    .limit(50))
+    .filter(a => !loggedIds.has(a.id) && (a.secondaryTypes?.length ?? 0) === 0)
+    .map(a => ({
+      mbid: a.id,
+      title: a.title,
+      artistName: a.artistName,
+      artistMbid: a.artistMbid,
+      year: a.year,
+      releaseDate: a.releaseDate,
+      primaryType: a.primaryType,
+      secondaryTypes: a.secondaryTypes ?? [],
+      score: 0,
+      coverArtUrl: a.coverArtUrl ?? null,
+    }));
+
+  if (recentlyBrowsed.length >= limit) return recentlyBrowsed.slice(0, limit);
+
+  // 2. Albums by top-rated artists (avg ≥ 7 = 3.5 stars), fetched from MB.
+  const topArtists = await db
+    .select({ artistMbid: albums.artistMbid })
+    .from(entries)
+    .innerJoin(albums, eq(entries.albumId, albums.id))
+    .where(and(
+      eq(entries.userId, user.id),
+      isNotNull(entries.rating),
+      isNotNull(albums.artistMbid),
+    ))
+    .groupBy(albums.artistMbid)
+    .having(sql`avg(${entries.rating}) >= 7`)
+    .orderBy(desc(sql`avg(${entries.rating})`))
+    .limit(3);
+
+  const recs: HomeRecommendation[] = [...recentlyBrowsed];
+  const seenMbids = new Set(recs.map(r => r.mbid));
+
+  for (const { artistMbid } of topArtists) {
+    if (!artistMbid || recs.length >= limit) break;
+    try {
+      const { releaseGroups } = await getArtistReleaseGroups(artistMbid);
+      for (const rg of releaseGroups) {
+        if (recs.length >= limit) break;
+        if (
+          rg.primaryType === "Album" &&
+          rg.secondaryTypes.length === 0 &&
+          !loggedIds.has(rg.mbid) &&
+          !seenMbids.has(rg.mbid)
+        ) {
+          recs.push({ ...rg, coverArtUrl: null });
+          seenMbids.add(rg.mbid);
+        }
+      }
+    } catch {
+      // Skip artists if MB is unavailable
+    }
+  }
+
+  return recs.slice(0, limit);
 }
