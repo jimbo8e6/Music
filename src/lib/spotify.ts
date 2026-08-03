@@ -297,28 +297,42 @@ export async function getSpotifyArtistAlbums(
     includeGroups = "album,single,compilation",
   }: { includeGroups?: string } = {},
 ): Promise<SpotifyAlbumResult[]> {
-  try {
-    const data = await spotifyFetch<{ items: RawSpotifyAlbum[]; total: number }>(
-      `/artists/${artistId}/albums`,
-      {
-        include_groups: includeGroups,
-        limit: "50",
-        market: "US",
-      },
-      LOOKUP_CACHE_MS,
-    );
-    // market=US already scopes to one market so cross-region duplicates
-    // don't appear; deduplicate only by Spotify ID to be safe.
-    const seen = new Set<string>();
-    return (data.items ?? []).filter(a => {
-      if (seen.has(a.id)) return false;
-      seen.add(a.id);
-      return true;
-    }).map(toAlbumResult);
-  } catch (err) {
-    console.error("[spotify] Artist albums fetch failed:", err);
-    return [];
+  const all: SpotifyAlbumResult[] = [];
+  const seen = new Set<string>();
+  let offset = 0;
+
+  for (;;) {
+    const params: Record<string, string> = {
+      include_groups: includeGroups,
+      market: "US",
+    };
+    if (offset > 0) params.offset = String(offset);
+
+    let page: { items: RawSpotifyAlbum[]; total: number; next: string | null };
+    try {
+      page = await spotifyFetch<typeof page>(
+        `/artists/${artistId}/albums`,
+        params,
+        LOOKUP_CACHE_MS,
+      );
+    } catch (err) {
+      if (all.length > 0) break;
+      console.error("[spotify] Artist albums fetch failed:", err);
+      return [];
+    }
+
+    for (const album of page.items ?? []) {
+      if (!seen.has(album.id)) {
+        seen.add(album.id);
+        all.push(toAlbumResult(album));
+      }
+    }
+
+    if (!page.next || !page.items?.length || all.length >= 300) break;
+    offset += page.items.length;
   }
+
+  return all;
 }
 
 /* -------------------------------------------------------------------------- */
