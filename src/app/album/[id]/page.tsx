@@ -98,9 +98,9 @@ export default async function AlbumPage({
         <div className="space-y-6">
           <header className="space-y-2">
             <h1 className="text-3xl leading-tight font-bold">{album.title}</h1>
-            {album.artistMbid ? (
+            {album.artistSpotifyId || album.artistMbid ? (
               <Link
-                href={`/artist/${album.artistMbid}`}
+                href={`/artist/${album.artistSpotifyId ?? album.artistMbid}`}
                 className="text-mist-300 hover:text-accent-400 inline-block text-lg transition-colors"
               >
                 {album.artistName}
@@ -181,7 +181,7 @@ export default async function AlbumPage({
             </section>
           )}
 
-          {album.mbid && (
+          {album.mbid && !album.artistSpotifyId && (
             <p className="text-mist-400 text-xs">
               <a
                 href={`https://musicbrainz.org/release-group/${album.mbid}`}

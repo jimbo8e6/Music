@@ -3,9 +3,9 @@ import Link from "next/link";
 
 import { AlbumCard } from "@/components/AlbumCard";
 import { fetchAppleNewReleases, type AppleRelease } from "@/lib/applemusic";
-import { coverArtUrlForMbid } from "@/lib/coverart";
-import { searchAlbums } from "@/lib/musicbrainz";
-import { getHomeRecommendations } from "@/lib/queries";
+import { coverArtUrl } from "@/lib/coverart";
+import { searchSpotifyAlbums } from "@/lib/spotify";
+import { getHomeRecommendations, type HomeRecommendation } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -27,9 +27,8 @@ async function NewReleasesSection() {
   const appleReleases = await fetchAppleNewReleases({ limit: 8 });
   if (!appleReleases.length) return null;
 
-  // Resolve a MusicBrainz ID for each Apple album so we can link into the app.
-  // These searches go through the MB cache (12h TTL), so they're instant on
-  // warm cache — the 1.1s rate limit only applies on a cold start.
+  // Resolve a Spotify ID for each Apple album so we can link into the app.
+  // Results are cached in mb_cache (12h TTL).
   const releases = await Promise.all(appleReleases.map(resolveAppleRelease));
 
   return (
@@ -37,8 +36,8 @@ async function NewReleasesSection() {
       <SectionHeading title="New Releases" />
       <ScrollRow>
         {releases.map(r => {
-          const href = r.mbid
-            ? `/album/${r.mbid}`
+          const href = r.spotifyId
+            ? `/album/${r.spotifyId}`
             : `/search?q=${encodeURIComponent(`${r.name} ${r.artistName}`)}`;
           return (
             <CardSlot key={r.id}>
@@ -57,18 +56,18 @@ async function NewReleasesSection() {
   );
 }
 
-/** Looks up the MusicBrainz release-group ID for an Apple Music album. */
-async function resolveAppleRelease(r: AppleRelease): Promise<AppleRelease & { mbid: string | null }> {
+/** Looks up the Spotify ID for an Apple Music album so we can link into the app. */
+async function resolveAppleRelease(r: AppleRelease): Promise<AppleRelease & { spotifyId: string | null }> {
   try {
-    const results = await searchAlbums(`${r.name} ${r.artistName}`, { limit: 1, filter: "all" });
-    return { ...r, mbid: results[0]?.mbid ?? null };
+    const results = await searchSpotifyAlbums(`${r.name} ${r.artistName}`, { limit: 1 });
+    return { ...r, spotifyId: results[0]?.spotifyId ?? null };
   } catch {
-    return { ...r, mbid: null };
+    return { ...r, spotifyId: null };
   }
 }
 
 async function RecommendationsSection() {
-  const recs = await getHomeRecommendations({ limit: 12 });
+  const recs: HomeRecommendation[] = await getHomeRecommendations({ limit: 12 });
   if (!recs.length) return null;
 
   return (
@@ -85,7 +84,7 @@ async function RecommendationsSection() {
               title={r.title}
               artist={r.artistName}
               year={r.year}
-              coverUrl={coverArtUrlForMbid(r.mbid, 500)}
+              coverUrl={r.coverArtUrl ?? coverArtUrl({ id: r.mbid, mbid: r.mbid, coverArtUrl: null }, 500)}
             />
           </CardSlot>
         ))}
