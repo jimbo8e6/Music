@@ -273,7 +273,7 @@ export async function getCurrentUser(): Promise<schema.User> {
     .insert(schema.users)
     .values({
       id: userId,
-      username: "you",
+      username: userId,
       displayName: "You",
       bio: null,
       avatarUrl: null,
