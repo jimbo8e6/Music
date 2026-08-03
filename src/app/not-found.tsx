@@ -4,7 +4,7 @@ export default function NotFound() {
   return (
     <EmptyState
       title="Not found"
-      body="That album isn't in MusicBrainz under this id, or the page doesn't exist."
+      body="That page doesn't exist, or the album couldn't be found."
       actionHref="/search"
       actionLabel="Search instead"
     />
