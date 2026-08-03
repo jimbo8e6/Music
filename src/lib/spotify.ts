@@ -302,21 +302,19 @@ export async function getSpotifyArtistAlbums(
       `/artists/${artistId}/albums`,
       {
         include_groups: includeGroups,
+        limit: "50",
         market: "US",
       },
       LOOKUP_CACHE_MS,
     );
-
-    // Deduplicate: Spotify sometimes returns the same album for different markets
+    // market=US already scopes to one market so cross-region duplicates
+    // don't appear; deduplicate only by Spotify ID to be safe.
     const seen = new Set<string>();
-    return (data.items ?? [])
-      .filter(album => {
-        const key = `${album.name.toLowerCase()}::${album.album_type}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map(toAlbumResult);
+    return (data.items ?? []).filter(a => {
+      if (seen.has(a.id)) return false;
+      seen.add(a.id);
+      return true;
+    }).map(toAlbumResult);
   } catch (err) {
     console.error("[spotify] Artist albums fetch failed:", err);
     return [];
