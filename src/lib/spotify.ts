@@ -119,19 +119,20 @@ function yearOf(date: string | undefined | null): number | null {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Returns up to `limit` recent albums using Spotify's `tag:new` search filter,
- * which returns music recently added to the Spotify catalogue.
+ * Returns up to `limit` recent full-length albums using Spotify's `tag:new`
+ * search filter. Fetches 50 results and filters to proper albums (album_type
+ * "album", at least 6 tracks) to exclude singles, EPs, and compilations.
  * Falls back to an empty array on any error.
  */
 export async function getSpotifyNewReleases(limit = 10): Promise<SpotifyAlbumResult[]> {
   try {
     const data = await spotifyFetch<{ albums: { items: RawSpotifyAlbum[] } }>(
       "/search",
-      { q: "tag:new", type: "album" },
+      { q: "tag:new", type: "album", limit: "50" },
       6 * 60 * 60 * 1000,
     );
     return (data.albums?.items ?? [])
-      .filter(a => a.album_type === "album")
+      .filter(a => a.album_type === "album" && a.total_tracks >= 6)
       .slice(0, limit)
       .map(toAlbumResult);
   } catch {
@@ -144,10 +145,11 @@ export async function checkSpotifyHealth(): Promise<{ ok: boolean; count?: numbe
   try {
     const data = await spotifyFetch<{ albums: { items: RawSpotifyAlbum[] } }>(
       "/search",
-      { q: "tag:new", type: "album" },
+      { q: "tag:new", type: "album", limit: "50" },
       0,
     );
-    const count = (data.albums?.items ?? []).length;
+    const count = (data.albums?.items ?? [])
+      .filter(a => a.album_type === "album" && a.total_tracks >= 6).length;
     return { ok: count > 0, count };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
