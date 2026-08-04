@@ -358,9 +358,10 @@ export async function getSpotifyArtistAlbums(
         LOOKUP_CACHE_MS,
       );
     } catch (err) {
+      // If we already have some pages, stop paginating gracefully.
+      // If this is the first page, re-throw so the caller can show a real error.
       if (all.length > 0) break;
-      console.error("[spotify] Artist albums fetch failed:", err);
-      return [];
+      throw err;
     }
 
     for (const album of page.items ?? []) {

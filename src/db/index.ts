@@ -199,13 +199,14 @@ async function baselinePushedDatabase(migrationsFolder: string): Promise<void> {
  * making this a no-op after the first run.
  */
 export function ready(): Promise<void> {
-  globalForDb.__waxReady ??= (async () => {
-    if (connection.problem) throw new Error(connection.problem);
+  if (!globalForDb.__waxReady) {
+    const p = (async () => {
+      if (connection.problem) throw new Error(connection.problem);
 
-    const migrationsFolder = path.join(process.cwd(), "drizzle");
-    try {
-      await baselinePushedDatabase(migrationsFolder);
-      await migrate(db, { migrationsFolder });
+      const migrationsFolder = path.join(process.cwd(), "drizzle");
+      try {
+        await baselinePushedDatabase(migrationsFolder);
+        await migrate(db, { migrationsFolder });
 
       // Safety: if the DB was baselined from a db:push that predated this
       // column, the migration was marked as applied without running the DDL.
@@ -268,9 +269,16 @@ export function ready(): Promise<void> {
         }`,
       );
     }
-  })();
+    })();
+    globalForDb.__waxReady = p;
+    // Don't cache rejections: allow a retry on the next request after a
+    // transient outage instead of failing forever for the Lambda's lifetime.
+    p.catch(() => {
+      if (globalForDb.__waxReady === p) globalForDb.__waxReady = undefined;
+    });
+  }
 
-  return globalForDb.__waxReady;
+  return globalForDb.__waxReady!;
 }
 
 /**

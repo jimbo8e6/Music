@@ -101,7 +101,21 @@ function spotifySectionOf(album: SpotifyAlbumResult): SpotifySection {
 }
 
 async function SpotifyDiscography({ artistId }: { artistId: string }) {
-  const albums = await getSpotifyArtistAlbums(artistId);
+  let albums;
+  try {
+    albums = await getSpotifyArtistAlbums(artistId);
+  } catch {
+    return (
+      <div
+        role="alert"
+        className="surface border-red-500/30 bg-red-500/5 px-6 py-10 text-center"
+      >
+        <p className="text-sm text-red-300">
+          Couldn&apos;t load albums right now. Try refreshing the page.
+        </p>
+      </div>
+    );
+  }
 
   if (albums.length === 0) {
     return (
@@ -302,15 +316,19 @@ function DiscographySkeleton() {
 async function ratingsFor(ids: string[]): Promise<Map<string, number | null>> {
   if (ids.length === 0) return new Map();
 
-  const user = await getOptionalCurrentUser();
-  if (!user) return new Map();
+  try {
+    const user = await getOptionalCurrentUser();
+    if (!user) return new Map();
 
-  const rows = await db
-    .select({ albumId: schema.entries.albumId, rating: schema.entries.rating })
-    .from(schema.entries)
-    .where(
-      and(eq(schema.entries.userId, user.id), inArray(schema.entries.albumId, ids)),
-    );
+    const rows = await db
+      .select({ albumId: schema.entries.albumId, rating: schema.entries.rating })
+      .from(schema.entries)
+      .where(
+        and(eq(schema.entries.userId, user.id), inArray(schema.entries.albumId, ids)),
+      );
 
-  return new Map(rows.map((row) => [row.albumId, row.rating]));
+    return new Map(rows.map((row) => [row.albumId, row.rating]));
+  } catch {
+    return new Map();
+  }
 }

@@ -241,15 +241,19 @@ function capitalise(s: string): string {
 async function ratingsFor(ids: string[]): Promise<Map<string, number | null>> {
   if (ids.length === 0) return new Map();
 
-  const user = await getOptionalCurrentUser();
-  if (!user) return new Map();
+  try {
+    const user = await getOptionalCurrentUser();
+    if (!user) return new Map();
 
-  const rows = await db
-    .select({ albumId: schema.entries.albumId, rating: schema.entries.rating })
-    .from(schema.entries)
-    .where(
-      and(eq(schema.entries.userId, user.id), inArray(schema.entries.albumId, ids)),
-    );
+    const rows = await db
+      .select({ albumId: schema.entries.albumId, rating: schema.entries.rating })
+      .from(schema.entries)
+      .where(
+        and(eq(schema.entries.userId, user.id), inArray(schema.entries.albumId, ids)),
+      );
 
-  return new Map(rows.map((row) => [row.albumId, row.rating]));
+    return new Map(rows.map((row) => [row.albumId, row.rating]));
+  } catch {
+    return new Map();
+  }
 }
