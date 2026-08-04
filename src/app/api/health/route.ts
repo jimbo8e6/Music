@@ -36,12 +36,22 @@ export async function GET() {
     lastfm = { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 
+  // Check Spotify reachability (used for artist pages and album search).
+  let spotify: { ok: boolean; count?: number; error?: string } = { ok: false };
+  try {
+    const { checkSpotifyHealth } = await import("@/lib/spotify");
+    spotify = await checkSpotifyHealth();
+  } catch (err) {
+    spotify = { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+
   return NextResponse.json(
     {
       ok: database.ok,
       connection,
       database,
       lastfm,
+      spotify,
       lastfmConfigured: Boolean(process.env.LASTFM_API_KEY?.trim()),
       authSecret: Boolean(process.env.AUTH_SECRET?.trim()),
       spotifyConfigured: Boolean(
