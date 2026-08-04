@@ -27,13 +27,14 @@ export async function GET() {
     };
   }
 
-  // Check Spotify reachability (used for new releases on the home page).
-  let spotify: { ok: boolean; count?: number; error?: string } = { ok: false };
+  // Check Last.fm reachability (used for popular albums on the home page).
+  let lastfm: { ok: boolean; count?: number; error?: string } = { ok: false };
   try {
-    const { checkSpotifyHealth } = await import("@/lib/spotify");
-    spotify = await checkSpotifyHealth();
+    const { getTopAlbums } = await import("@/lib/lastfm");
+    const albums = await getTopAlbums({ limit: 4 });
+    lastfm = { ok: albums.length > 0, count: albums.length };
   } catch (err) {
-    spotify = { ok: false, error: err instanceof Error ? err.message : String(err) };
+    lastfm = { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 
   return NextResponse.json(
@@ -41,7 +42,8 @@ export async function GET() {
       ok: database.ok,
       connection,
       database,
-      spotify,
+      lastfm,
+      lastfmConfigured: Boolean(process.env.LASTFM_API_KEY?.trim()),
       authSecret: Boolean(process.env.AUTH_SECRET?.trim()),
       spotifyConfigured: Boolean(
         process.env.SPOTIFY_CLIENT_ID?.trim() && process.env.SPOTIFY_CLIENT_SECRET?.trim(),

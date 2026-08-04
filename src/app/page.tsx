@@ -3,7 +3,8 @@ import Link from "next/link";
 
 import { AlbumCard } from "@/components/AlbumCard";
 import { coverArtUrl } from "@/lib/coverart";
-import { getSpotifyNewReleases, type SpotifyAlbumResult } from "@/lib/spotify";
+import { getTopAlbums, type LastFmAlbum } from "@/lib/lastfm";
+import { searchSpotifyAlbums } from "@/lib/spotify";
 import { getHomeRecommendations, type HomeRecommendation } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,7 @@ export default function HomePage() {
   return (
     <div className="space-y-12">
       <Suspense fallback={<RowSkeleton />}>
-        <NewReleasesSection />
+        <PopularAlbumsSection />
       </Suspense>
 
       <Suspense fallback={null}>
@@ -22,36 +23,49 @@ export default function HomePage() {
   );
 }
 
-async function NewReleasesSection() {
-  const releases: SpotifyAlbumResult[] = await getSpotifyNewReleases(10);
+async function PopularAlbumsSection() {
+  const lastfmAlbums = await getTopAlbums({ limit: 12 });
+  if (!lastfmAlbums.length) return null;
 
-  if (!releases.length) {
-    return (
-      <section className="space-y-4">
-        <SectionHeading title="New Releases" />
-        <p className="text-mist-500 text-sm">New releases unavailable right now.</p>
-      </section>
-    );
-  }
+  const albums = await Promise.all(lastfmAlbums.map(resolveAlbum));
 
   return (
     <section className="space-y-4">
-      <SectionHeading title="New Releases" />
+      <SectionHeading title="Popular This Week" />
       <ScrollRow>
-        {releases.map(r => (
-          <CardSlot key={r.spotifyId}>
+        {albums.map((r, i) => (
+          <CardSlot key={i}>
             <AlbumCard
-              href={`/album/${r.spotifyId}`}
+              href={r.href}
               title={r.title}
               artist={r.artistName}
               year={r.year}
-              coverUrl={r.artworkUrl}
+              coverUrl={r.coverUrl}
             />
           </CardSlot>
         ))}
       </ScrollRow>
     </section>
   );
+}
+
+async function resolveAlbum(a: LastFmAlbum): Promise<{
+  title: string; artistName: string; href: string; coverUrl: string | null; year: number | null;
+}> {
+  try {
+    const results = await searchSpotifyAlbums(`${a.name} ${a.artistName}`, { limit: 1 });
+    const s = results[0];
+    if (s) return { title: s.title, artistName: s.artistName, href: `/album/${s.spotifyId}`, coverUrl: s.artworkUrl, year: s.year };
+  } catch {
+    // fall through
+  }
+  return {
+    title: a.name,
+    artistName: a.artistName,
+    href: `/search?q=${encodeURIComponent(`${a.name} ${a.artistName}`)}`,
+    coverUrl: a.imageUrl,
+    year: null,
+  };
 }
 
 async function RecommendationsSection() {
