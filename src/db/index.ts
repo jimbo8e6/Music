@@ -274,6 +274,24 @@ export function ready(): Promise<void> {
 }
 
 /**
+ * Returns the authenticated user, or null on public routes where no session exists.
+ */
+export async function getOptionalCurrentUser(): Promise<schema.User | null> {
+  await ready();
+  let userId: string;
+  try {
+    const headerStore = await headers();
+    userId = headerStore.get("x-user-id") ?? "";
+  } catch {
+    userId = "";
+  }
+  if (!userId) return null;
+  return (
+    (await db.select().from(schema.users).where(eq(schema.users.id, userId)).get()) ?? null
+  );
+}
+
+/**
  * Resolves the authenticated user from the x-user-id header injected by middleware.
  * Middleware guarantees this header is present on all non-public routes.
  */

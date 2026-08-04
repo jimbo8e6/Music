@@ -6,7 +6,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { AlbumCard } from "@/components/AlbumCard";
 import { AlbumGridSkeleton } from "@/components/AlbumGridSkeleton";
 import { activeYears } from "@/components/ArtistCard";
-import { db, getCurrentUser, schema } from "@/db";
+import { db, getOptionalCurrentUser, schema } from "@/db";
 import {
   MusicBrainzError,
   getArtistReleaseGroups,
@@ -302,7 +302,9 @@ function DiscographySkeleton() {
 async function ratingsFor(ids: string[]): Promise<Map<string, number | null>> {
   if (ids.length === 0) return new Map();
 
-  const user = await getCurrentUser();
+  const user = await getOptionalCurrentUser();
+  if (!user) return new Map();
+
   const rows = await db
     .select({ albumId: schema.entries.albumId, rating: schema.entries.rating })
     .from(schema.entries)

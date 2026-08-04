@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import Link from "next/link";
 import { Suspense } from "react";
 
@@ -39,6 +40,9 @@ export default async function AlbumPage({
   const { id } = await params;
   const album = await loadAlbumOrNotFound(id);
 
+  const headerStore = await headers();
+  const isLoggedIn = Boolean(headerStore.get("x-user-id"));
+
   const [entry, onWatchlist, ownedFormats] = await Promise.all([
     getEntryForAlbum(album.id),
     isOnWatchlist(album.id),
@@ -68,20 +72,28 @@ export default async function AlbumPage({
           />
 
           <div className="flex flex-col gap-2">
-            <Link href={`/album/${album.id}/log`} className="btn btn-primary w-full">
-              {entry ? "Edit your review" : "Rate or review"}
-            </Link>
+            {isLoggedIn ? (
+              <>
+                <Link href={`/album/${album.id}/log`} className="btn btn-primary w-full">
+                  {entry ? "Edit your review" : "Rate or review"}
+                </Link>
 
-            {!entry && (
-              <form action={toggleWatchlist}>
-                <input type="hidden" name="albumId" value={album.id} />
-                <button type="submit" className="btn btn-ghost w-full">
-                  {onWatchlist ? "Remove from listen later" : "Listen later"}
-                </button>
-              </form>
+                {!entry && (
+                  <form action={toggleWatchlist}>
+                    <input type="hidden" name="albumId" value={album.id} />
+                    <button type="submit" className="btn btn-ghost w-full">
+                      {onWatchlist ? "Remove from listen later" : "Listen later"}
+                    </button>
+                  </form>
+                )}
+
+                <OwnedFormatsButton albumId={album.id} initialFormats={ownedFormats} />
+              </>
+            ) : (
+              <Link href="/login" className="btn btn-primary w-full">
+                Sign in to rate
+              </Link>
             )}
-
-            <OwnedFormatsButton albumId={album.id} initialFormats={ownedFormats} />
 
             {/* Search links render immediately; the exact album link replaces
                 them if MusicBrainz has one. Same shape either way, so nothing
@@ -180,11 +192,11 @@ export default async function AlbumPage({
                 </form>
               </div>
             </section>
-          ) : (
+          ) : isLoggedIn ? (
             <section className="border-ink-800 text-mist-400 rounded-lg border border-dashed px-5 py-8 text-sm">
               You haven&apos;t logged this one yet.
             </section>
-          )}
+          ) : null}
 
           {album.mbid && !album.artistSpotifyId && (
             <p className="text-mist-400 text-xs">

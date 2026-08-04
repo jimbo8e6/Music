@@ -2,7 +2,7 @@ import { cache } from "react";
 
 import { and, avg, count, desc, eq, gt, isNotNull, like, sql } from "drizzle-orm";
 
-import { db, getCurrentUser, ready, schema } from "@/db";
+import { db, getCurrentUser, getOptionalCurrentUser, ready, schema } from "@/db";
 import type { Album, Entry } from "@/db/schema";
 import {
   fetchExternalLinks,
@@ -189,12 +189,13 @@ export async function getTrackCount(id: string): Promise<number | null> {
 }
 
 export async function getAlbum(id: string): Promise<Album | undefined> {
-  await getCurrentUser();
+  await ready();
   return db.select().from(albums).where(eq(albums.id, id)).get();
 }
 
 export async function getEntryForAlbum(albumId: string): Promise<Entry | undefined> {
-  const user = await getCurrentUser();
+  const user = await getOptionalCurrentUser();
+  if (!user) return undefined;
   return db
     .select()
     .from(entries)
@@ -309,7 +310,8 @@ export async function getWatchlist(): Promise<Album[]> {
 }
 
 export async function getOwnedFormats(albumId: string): Promise<string[]> {
-  const user = await getCurrentUser();
+  const user = await getOptionalCurrentUser();
+  if (!user) return [];
   const row = await db
     .select()
     .from(collection)
@@ -330,7 +332,8 @@ export async function getCollection(): Promise<{ album: Album; formats: string[]
 }
 
 export async function isOnWatchlist(albumId: string): Promise<boolean> {
-  const user = await getCurrentUser();
+  const user = await getOptionalCurrentUser();
+  if (!user) return false;
   const row = await db
     .select({ id: watchlist.id })
     .from(watchlist)
@@ -358,7 +361,8 @@ export interface HomeRecommendation extends AlbumSearchResult {
 export async function getHomeRecommendations({
   limit = 12,
 }: { limit?: number } = {}): Promise<HomeRecommendation[]> {
-  const user = await getCurrentUser();
+  const user = await getOptionalCurrentUser();
+  if (!user) return [];
 
   const loggedRows = await db
     .select({ albumId: entries.albumId })

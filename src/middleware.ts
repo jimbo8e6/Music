@@ -3,7 +3,18 @@ import type { NextRequest } from "next/server";
 
 import { getSessionFromRequest } from "@/lib/auth";
 
-const PUBLIC_PATHS = new Set(["/login", "/register"]);
+const AUTH_ONLY_PATHS = new Set(["/login", "/register"]);
+
+const PUBLIC_PATHS = new Set(["/", "/search", "/people"]);
+const PUBLIC_PREFIXES = ["/album/", "/artist/", "/profile/"];
+
+function isPublic(pathname: string): boolean {
+  // Log form always requires auth even though /album/* is otherwise public
+  if (/^\/album\/[^/]+\/log(\/|$)/.test(pathname)) return false;
+  if (AUTH_ONLY_PATHS.has(pathname)) return true;
+  if (PUBLIC_PATHS.has(pathname)) return true;
+  return PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -11,12 +22,12 @@ export async function middleware(request: NextRequest) {
   const session = await getSessionFromRequest(request);
 
   // Logged-in users hitting login/register → send home
-  if (session && PUBLIC_PATHS.has(pathname)) {
+  if (session && AUTH_ONLY_PATHS.has(pathname)) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
   // Unauthenticated users hitting protected routes → send to login
-  if (!session && !PUBLIC_PATHS.has(pathname)) {
+  if (!session && !isPublic(pathname)) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
