@@ -118,34 +118,22 @@ function yearOf(date: string | undefined | null): number | null {
 /* New releases (via editorial playlist)                                       */
 /* -------------------------------------------------------------------------- */
 
-// Spotify's "New Music Friday" (US). Spotify maintains this weekly.
-const NEW_MUSIC_FRIDAY_ID = "37i9dQZF1DX4JAvHpjipBk";
-
-interface RawPlaylistTrackPage {
-  items: Array<{ track: { album: RawSpotifyAlbum } | null } | null>;
-}
-
 /**
- * Returns up to `limit` distinct albums from Spotify's New Music Friday
- * playlist. Falls back to an empty array on any error.
+ * Returns up to `limit` recent albums using Spotify's `tag:new` search filter,
+ * which returns music recently added to the Spotify catalogue.
+ * Falls back to an empty array on any error.
  */
 export async function getSpotifyNewReleases(limit = 10): Promise<SpotifyAlbumResult[]> {
   try {
-    const data = await spotifyFetch<RawPlaylistTrackPage>(
-      `/playlists/${NEW_MUSIC_FRIDAY_ID}/tracks`,
-      { limit: "50" },
+    const data = await spotifyFetch<{ albums: { items: RawSpotifyAlbum[] } }>(
+      "/search",
+      { q: "tag:new", type: "album" },
       6 * 60 * 60 * 1000,
     );
-    const seen = new Set<string>();
-    const albums: SpotifyAlbumResult[] = [];
-    for (const item of data?.items ?? []) {
-      const album = item?.track?.album;
-      if (!album?.id || seen.has(album.id)) continue;
-      seen.add(album.id);
-      albums.push(toAlbumResult(album));
-      if (albums.length >= limit) break;
-    }
-    return albums;
+    return (data.albums?.items ?? [])
+      .filter(a => a.album_type === "album")
+      .slice(0, limit)
+      .map(toAlbumResult);
   } catch {
     return [];
   }
@@ -154,12 +142,12 @@ export async function getSpotifyNewReleases(limit = 10): Promise<SpotifyAlbumRes
 /** Health check that surfaces the actual Spotify error instead of swallowing it. */
 export async function checkSpotifyHealth(): Promise<{ ok: boolean; count?: number; error?: string }> {
   try {
-    const data = await spotifyFetch<RawPlaylistTrackPage>(
-      `/playlists/${NEW_MUSIC_FRIDAY_ID}/tracks`,
-      { limit: "4" },
-      0, // bypass cache so we hit the live API
+    const data = await spotifyFetch<{ albums: { items: RawSpotifyAlbum[] } }>(
+      "/search",
+      { q: "tag:new", type: "album" },
+      0,
     );
-    const count = (data?.items ?? []).filter(i => i?.track?.album).length;
+    const count = (data.albums?.items ?? []).length;
     return { ok: count > 0, count };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
