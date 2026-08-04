@@ -15,7 +15,7 @@ import {
 import { getOrFetchAlbum } from "@/lib/queries";
 import { MAX_RATING, PHYSICAL_FORMATS } from "@/lib/format";
 
-const { entries, watchlist, collection, users } = schema;
+const { entries, watchlist, collection, users, follows } = schema;
 
 export interface AuthFormState {
   error?: string;
@@ -92,6 +92,26 @@ export async function loginUser(
 export async function logout(): Promise<void> {
   await clearSessionCookie();
   redirect("/login");
+}
+
+export async function followUser(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  const followingId = String(formData.get("followingId") ?? "").trim();
+  const username = String(formData.get("username") ?? "").trim();
+  if (!followingId || followingId === user.id) return;
+  await db.insert(follows).values({ followerId: user.id, followingId }).onConflictDoNothing();
+  revalidatePath(`/profile/${username}`);
+}
+
+export async function unfollowUser(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  const followingId = String(formData.get("followingId") ?? "").trim();
+  const username = String(formData.get("username") ?? "").trim();
+  if (!followingId) return;
+  await db
+    .delete(follows)
+    .where(and(eq(follows.followerId, user.id), eq(follows.followingId, followingId)));
+  revalidatePath(`/profile/${username}`);
 }
 
 function parseRating(raw: FormDataEntryValue | null): number | null {

@@ -1,6 +1,6 @@
 import { cache } from "react";
 
-import { and, avg, count, desc, eq, gt, isNotNull, sql } from "drizzle-orm";
+import { and, avg, count, desc, eq, gt, isNotNull, like, sql } from "drizzle-orm";
 
 import { db, getCurrentUser, schema } from "@/db";
 import type { Album, Entry } from "@/db/schema";
@@ -21,7 +21,7 @@ export interface EntryWithAlbum {
   album: Album;
 }
 
-const { albums, entries, watchlist, collection } = schema;
+const { albums, entries, watchlist, collection, follows } = schema;
 
 /**
  * Returns the cached album, fetching and caching it from MusicBrainz on a miss.
@@ -430,4 +430,97 @@ export async function getHomeRecommendations({
   }
 
   return recs.slice(0, limit);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Social / profiles                                                           */
+/* -------------------------------------------------------------------------- */
+
+export interface PublicUser {
+  id: string;
+  username: string;
+  displayName: string;
+  bio: string | null;
+  avatarUrl: string | null;
+}
+
+export async function getUserByUsername(username: string): Promise<PublicUser | null> {
+  const user = await db
+    .select({
+      id: schema.users.id,
+      username: schema.users.username,
+      displayName: schema.users.displayName,
+      bio: schema.users.bio,
+      avatarUrl: schema.users.avatarUrl,
+    })
+    .from(schema.users)
+    .where(eq(schema.users.username, username))
+    .get();
+  return user ?? null;
+}
+
+export interface ProfileStats {
+  logged: number;
+  rated: number;
+  followers: number;
+  following: number;
+}
+
+export async function getProfileStats(userId: string): Promise<ProfileStats> {
+  const [totals, followerRow, followingRow] = await Promise.all([
+    db
+      .select({
+        logged: count(),
+        rated: sql<number>`sum(case when ${entries.rating} is not null then 1 else 0 end)`,
+      })
+      .from(entries)
+      .where(eq(entries.userId, userId))
+      .get(),
+    db.select({ n: count() }).from(follows).where(eq(follows.followingId, userId)).get(),
+    db.select({ n: count() }).from(follows).where(eq(follows.followerId, userId)).get(),
+  ]);
+  return {
+    logged: totals?.logged ?? 0,
+    rated: Number(totals?.rated ?? 0),
+    followers: followerRow?.n ?? 0,
+    following: followingRow?.n ?? 0,
+  };
+}
+
+export async function getProfileEntries(
+  userId: string,
+  { limit = 12 }: { limit?: number } = {},
+): Promise<EntryWithAlbum[]> {
+  return db
+    .select({ entry: entries, album: albums })
+    .from(entries)
+    .innerJoin(albums, eq(entries.albumId, albums.id))
+    .where(eq(entries.userId, userId))
+    .orderBy(desc(entries.updatedAt))
+    .limit(limit);
+}
+
+export async function isFollowing(followerId: string, followingId: string): Promise<boolean> {
+  const row = await db
+    .select({ id: follows.id })
+    .from(follows)
+    .where(and(eq(follows.followerId, followerId), eq(follows.followingId, followingId)))
+    .get();
+  return Boolean(row);
+}
+
+export async function searchUsers(query: string): Promise<PublicUser[]> {
+  const q = query.trim();
+  if (!q) return [];
+  return db
+    .select({
+      id: schema.users.id,
+      username: schema.users.username,
+      displayName: schema.users.displayName,
+      bio: schema.users.bio,
+      avatarUrl: schema.users.avatarUrl,
+    })
+    .from(schema.users)
+    .where(like(schema.users.username, `%${q}%`))
+    .limit(20);
 }

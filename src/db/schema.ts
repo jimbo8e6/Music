@@ -134,6 +134,24 @@ export const mbCache = sqliteTable("mb_cache", {
   fetchedAt: integer("fetched_at", { mode: "timestamp" }).notNull(),
 });
 
+/** Who follows whom. One row per (follower, following) pair. */
+export const follows = sqliteTable("follows", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  followerId: text("follower_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  followingId: text("following_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+}, (t) => [
+  uniqueIndex("follows_pair_idx").on(t.followerId, t.followingId),
+  index("follows_follower_idx").on(t.followerId),
+  index("follows_following_idx").on(t.followingId),
+]);
+
 /** Physical formats the user owns an album on. Independent of ratings. */
 export const collection = sqliteTable("collection", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -168,3 +186,4 @@ export type Album = typeof albums.$inferSelect;
 export type NewAlbum = typeof albums.$inferInsert;
 export type Entry = typeof entries.$inferSelect;
 export type CollectionEntry = typeof collection.$inferSelect;
+export type Follow = typeof follows.$inferSelect;

@@ -5,9 +5,9 @@ import { logout } from "@/lib/actions";
 import { SearchBox } from "@/components/SearchBox";
 
 const LINKS = [
-  { href: "/activity", label: "Activity" },
   { href: "/library", label: "Library" },
   { href: "/watchlist", label: "Listen later" },
+  { href: "/people", label: "People" },
 ];
 
 export async function Nav() {
@@ -48,7 +48,12 @@ export async function Nav() {
             </div>
 
             <div className="text-mist-300 flex items-center gap-3 text-sm">
-              <span className="text-mist-400">@{username}</span>
+              <Link
+                href={`/profile/${username}`}
+                className="text-mist-400 hover:text-mist-100 transition-colors"
+              >
+                @{username}
+              </Link>
               <form action={logout}>
                 <button
                   type="submit"
