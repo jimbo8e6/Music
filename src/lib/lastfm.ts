@@ -11,18 +11,9 @@ export interface LastFmAlbum {
   mbid: string | null;
   artistMbid: string | null;
   imageUrl: string | null;
-  playcount: number;
 }
 
 interface RawImage { "#text": string; size: string }
-interface RawAlbum {
-  name: string;
-  playcount: string;
-  mbid?: string;
-  url: string;
-  artist: { name: string; mbid?: string };
-  image: RawImage[];
-}
 
 function bestImage(images: RawImage[]): string | null {
   for (const size of ["extralarge", "large", "medium"]) {
@@ -38,48 +29,65 @@ function apiKey(): string {
   return key;
 }
 
-function parse(data: unknown): LastFmAlbum[] {
-  const raw = data as { albums?: { album?: RawAlbum[] } };
-  return (raw.albums?.album ?? []).map(a => ({
-    name: a.name,
-    artistName: a.artist.name,
-    mbid: a.mbid || null,
-    artistMbid: a.artist.mbid || null,
-    imageUrl: bestImage(a.image),
-    playcount: parseInt(a.playcount, 10) || 0,
-  }));
-}
+/** Generic cached Last.fm API call. Cache key excludes the API key. */
+async function callApi(params: Record<string, string>, cacheMs = CACHE_MS): Promise<unknown> {
+  const cacheKey = `lastfm:${new URLSearchParams(params).toString()}`;
+  const cached = await readCache(cacheKey, cacheMs);
+  if (cached !== null) return cached;
 
-async function fetchTopAlbums(limit: number): Promise<unknown> {
-  const url = `${BASE}/?method=chart.getTopAlbums&api_key=${apiKey()}&format=json&limit=${limit}`;
-  const res = await fetch(url, { headers: { "User-Agent": "Wax/1.0" }, cache: "no-store" });
+  const url = new URL(`${BASE}/`);
+  url.searchParams.set("api_key", apiKey());
+  url.searchParams.set("format", "json");
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+
+  const res = await fetch(url.toString(), { headers: { "User-Agent": "Wax/1.0" }, cache: "no-store" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
   const data = await res.json() as unknown;
-  // Last.fm returns errors as { error: number, message: string } with HTTP 200
   const maybeErr = data as { error?: number; message?: string };
   if (maybeErr.error) throw new Error(`Last.fm error ${maybeErr.error}: ${maybeErr.message}`);
+
+  await writeCache(cacheKey, data);
   return data;
 }
 
+/**
+ * Returns popular albums by fetching the top artists chart, then getting
+ * each artist's #1 album in parallel. chart.getTopAlbums does not exist
+ * in Last.fm's API — this two-step approach is the correct alternative.
+ */
 export async function getTopAlbums({ limit = 10 }: { limit?: number } = {}): Promise<LastFmAlbum[]> {
-  const cacheKey = `lastfm:chart.getTopAlbums:limit=${limit}`;
-  const cached = await readCache(cacheKey, CACHE_MS);
-  if (cached !== null) return parse(cached);
+  const artistsData = await callApi({ method: "chart.getTopArtists", limit: String(limit) });
+  const artists = ((artistsData as { artists?: { artist?: { name: string; mbid?: string }[] } })
+    .artists?.artist ?? []);
 
-  try {
-    const data = await fetchTopAlbums(limit);
-    await writeCache(cacheKey, data);
-    return parse(data);
-  } catch (err) {
-    console.error("[lastfm] getTopAlbums failed:", err);
-    return [];
-  }
+  const results = await Promise.all(
+    artists.map(async (artist) => {
+      try {
+        const data = await callApi({ method: "artist.getTopAlbums", artist: artist.name, limit: "1" });
+        const album = ((data as { topalbums?: { album?: { name: string; mbid?: string; image: RawImage[] }[] } })
+          .topalbums?.album ?? [])[0];
+        if (!album?.name || album.name === "(null)") return null;
+        return {
+          name: album.name,
+          artistName: artist.name,
+          mbid: album.mbid || null,
+          artistMbid: artist.mbid || null,
+          imageUrl: bestImage(album.image),
+        } satisfies LastFmAlbum;
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return results.filter((a): a is LastFmAlbum => a !== null);
 }
 
 export async function checkLastFmHealth(): Promise<{ ok: boolean; count?: number; error?: string }> {
   try {
-    const data = await fetchTopAlbums(4);
-    const count = parse(data).length;
+    const data = await callApi({ method: "chart.getTopArtists", limit: "4" }, 0);
+    const count = ((data as { artists?: { artist?: unknown[] } }).artists?.artist ?? []).length;
     return { ok: count > 0, count };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
