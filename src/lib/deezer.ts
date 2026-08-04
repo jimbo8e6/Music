@@ -59,6 +59,18 @@ async function deezerFetch<T>(
 /* Shared helpers                                                              */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Deezer's placeholder cover URL has an empty md5 segment (double-slash).
+ * Filter it out so the app shows its own fallback rather than a black square.
+ */
+function bestCover(album: RawDeezerAlbum): string | null {
+  const candidates = [album.cover_xl, album.cover_big, album.cover_medium, album.cover];
+  for (const url of candidates) {
+    if (url && !url.includes("//images/")) return url;
+  }
+  return null;
+}
+
 function yearOf(date: string | undefined | null): number | null {
   if (!date) return null;
   const y = parseInt(date.slice(0, 4), 10);
@@ -74,7 +86,11 @@ interface RawDeezerAlbum {
   title: string;
   /** Present in search results; absent in artist album listings (artist is implied). */
   artist?: { id: number; name: string };
-  cover_xl: string | null;
+  cover_xl?: string | null;
+  cover_big?: string | null;
+  cover_medium?: string | null;
+  cover?: string | null;
+  md5_image?: string;
   release_date: string;
   record_type: string;
   nb_tracks: number;
@@ -97,7 +113,10 @@ interface RawDeezerAlbumDetail extends RawDeezerAlbum {
 interface RawDeezerArtist {
   id: number;
   name: string;
-  picture_xl: string | null;
+  picture_xl?: string | null;
+  picture_big?: string | null;
+  picture_medium?: string | null;
+  picture?: string | null;
   nb_fan: number;
   link: string;
 }
@@ -162,7 +181,7 @@ function toAlbumResult(
     artistDeezerId: album.artist ? String(album.artist.id) : (fallbackArtist?.id ?? ""),
     year: yearOf(album.release_date),
     releaseDate: album.release_date ?? null,
-    artworkUrl: album.cover_xl ?? null,
+    artworkUrl: bestCover(album),
     albumType: album.record_type ?? "album",
     totalTracks: album.nb_tracks,
   };
@@ -173,7 +192,8 @@ function toArtistResult(artist: RawDeezerArtist): DeezerArtistResult {
     deezerId: String(artist.id),
     name: artist.name,
     genres: [],
-    artworkUrl: artist.picture_xl ?? null,
+    artworkUrl: [artist.picture_xl, artist.picture_big, artist.picture_medium, artist.picture]
+      .find(u => u && !u.includes("//images/")) ?? null,
     followerCount: artist.nb_fan ?? 0,
     deezerUrl: artist.link ?? null,
   };
