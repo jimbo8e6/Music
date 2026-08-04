@@ -27,23 +27,14 @@ export async function GET() {
     };
   }
 
-  // Check Apple RSS reachability.
-  let appleRss: { ok: boolean; status?: number; count?: number; error?: string } = { ok: false };
+  // Check Spotify reachability (used for new releases on the home page).
+  let spotify: { ok: boolean; count?: number; error?: string } = { ok: false };
   try {
-    const url = "https://rss.applemarketingtools.com/api/v2/us/music/new-music/4/albums.json";
-    const res = await fetch(url, {
-      headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0" },
-      cache: "no-store",
-      signal: AbortSignal.timeout(5000),
-    });
-    if (res.ok) {
-      const data = (await res.json()) as { feed?: { results?: unknown[] } };
-      appleRss = { ok: true, status: res.status, count: data.feed?.results?.length ?? 0 };
-    } else {
-      appleRss = { ok: false, status: res.status, error: `HTTP ${res.status}` };
-    }
+    const { getSpotifyNewReleases } = await import("@/lib/spotify");
+    const releases = await getSpotifyNewReleases(4);
+    spotify = { ok: releases.length > 0, count: releases.length };
   } catch (err) {
-    appleRss = { ok: false, error: err instanceof Error ? err.message : String(err) };
+    spotify = { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 
   return NextResponse.json(
@@ -51,7 +42,7 @@ export async function GET() {
       ok: database.ok,
       connection,
       database,
-      appleRss,
+      spotify,
       authSecret: Boolean(process.env.AUTH_SECRET?.trim()),
       spotifyConfigured: Boolean(
         process.env.SPOTIFY_CLIENT_ID?.trim() && process.env.SPOTIFY_CLIENT_SECRET?.trim(),
