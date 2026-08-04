@@ -79,12 +79,30 @@ async function spotifyFetch<T>(
   if (cached !== null) return cached as T;
 
   const token = await getToken();
-  const res = await fetch(url.toString(), {
+
+  let res = await fetch(url.toString(), {
     headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
     cache: "no-store",
   });
 
+  // On 429 retry once after honouring Retry-After (capped at 5 s).
+  if (res.status === 429) {
+    const retryAfter = Number(res.headers.get("Retry-After") ?? "1");
+    const waitMs = Math.min(retryAfter * 1000, 5_000);
+    await new Promise((r) => setTimeout(r, waitMs));
+    res = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      cache: "no-store",
+    });
+  }
+
   if (res.status === 404) throw new SpotifyError("Not found on Spotify", 404);
+  if (res.status === 429) {
+    throw new SpotifyError(
+      "Spotify rate limit exceeded. This usually means the app needs Extended Quota Mode — see developer.spotify.com to request it.",
+      429,
+    );
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new SpotifyError(`Spotify responded ${res.status}${body ? ` — ${body}` : ""}`, res.status);
