@@ -30,9 +30,8 @@ export async function GET() {
   // Check Spotify reachability (used for new releases on the home page).
   let spotify: { ok: boolean; count?: number; error?: string } = { ok: false };
   try {
-    const { getSpotifyNewReleases } = await import("@/lib/spotify");
-    const releases = await getSpotifyNewReleases(4);
-    spotify = { ok: releases.length > 0, count: releases.length };
+    const { checkSpotifyHealth } = await import("@/lib/spotify");
+    spotify = await checkSpotifyHealth();
   } catch (err) {
     spotify = { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

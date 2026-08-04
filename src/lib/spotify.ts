@@ -151,6 +151,21 @@ export async function getSpotifyNewReleases(limit = 10): Promise<SpotifyAlbumRes
   }
 }
 
+/** Health check that surfaces the actual Spotify error instead of swallowing it. */
+export async function checkSpotifyHealth(): Promise<{ ok: boolean; count?: number; error?: string }> {
+  try {
+    const data = await spotifyFetch<RawPlaylistTrackPage>(
+      `/playlists/${NEW_MUSIC_FRIDAY_ID}/tracks`,
+      { limit: "4" },
+      0, // bypass cache so we hit the live API
+    );
+    const count = (data?.items ?? []).filter(i => i?.track?.album).length;
+    return { ok: count > 0, count };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* Album search                                                                */
 /* -------------------------------------------------------------------------- */
