@@ -3,7 +3,7 @@ import Link from "next/link";
 import { SearchBox } from "@/components/SearchBox";
 
 const LINKS = [
-  { href: "/", label: "Activity" },
+  { href: "/activity", label: "Activity" },
   { href: "/library", label: "Library" },
   { href: "/watchlist", label: "Listen later" },
 ];
