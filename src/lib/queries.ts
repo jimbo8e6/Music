@@ -2,7 +2,7 @@ import { cache } from "react";
 
 import { and, avg, count, desc, eq, gt, isNotNull, like, sql } from "drizzle-orm";
 
-import { db, getCurrentUser, schema } from "@/db";
+import { db, getCurrentUser, ready, schema } from "@/db";
 import type { Album, Entry } from "@/db/schema";
 import {
   fetchExternalLinks,
@@ -445,6 +445,7 @@ export interface PublicUser {
 }
 
 export async function getUserByUsername(username: string): Promise<PublicUser | null> {
+  await ready();
   const user = await db
     .select({
       id: schema.users.id,
@@ -467,6 +468,7 @@ export interface ProfileStats {
 }
 
 export async function getProfileStats(userId: string): Promise<ProfileStats> {
+  await ready();
   const [totals, followerRow, followingRow] = await Promise.all([
     db
       .select({
@@ -501,6 +503,7 @@ export async function getProfileEntries(
 }
 
 export async function isFollowing(followerId: string, followingId: string): Promise<boolean> {
+  await ready();
   const row = await db
     .select({ id: follows.id })
     .from(follows)
