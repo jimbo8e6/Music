@@ -102,9 +102,11 @@ function spotifySectionOf(album: SpotifyAlbumResult): SpotifySection {
 
 async function SpotifyDiscography({ artistId }: { artistId: string }) {
   let albums;
+  let albumsError: string | null = null;
   try {
     albums = await getSpotifyArtistAlbums(artistId);
-  } catch {
+  } catch (err) {
+    albumsError = err instanceof Error ? err.message : String(err);
     return (
       <div
         role="alert"
@@ -113,6 +115,9 @@ async function SpotifyDiscography({ artistId }: { artistId: string }) {
         <p className="text-sm text-red-300">
           Couldn&apos;t load albums right now. Try refreshing the page.
         </p>
+        {albumsError && (
+          <p className="text-mist-500 mt-2 font-mono text-xs">{albumsError}</p>
+        )}
       </div>
     );
   }

@@ -128,7 +128,7 @@ export async function getSpotifyNewReleases(limit = 10): Promise<SpotifyAlbumRes
   try {
     const data = await spotifyFetch<{ albums: { items: RawSpotifyAlbum[] } }>(
       "/search",
-      { q: "tag:new", type: "album", limit: "50" },
+      { q: "tag:new", type: "album", limit: "20" },
       6 * 60 * 60 * 1000,
     );
     return (data.albums?.items ?? [])
@@ -145,7 +145,7 @@ export async function checkSpotifyHealth(): Promise<{ ok: boolean; count?: numbe
   try {
     const data = await spotifyFetch<{ albums: { items: RawSpotifyAlbum[] } }>(
       "/search",
-      { q: "tag:new", type: "album", limit: "50" },
+      { q: "tag:new", type: "album", limit: "20" },
       0,
     );
     const count = (data.albums?.items ?? [])
