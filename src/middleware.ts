@@ -1,39 +1,35 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const COOKIE = "wax_session";
-const HEADER = "x-wax-session";
+import { getSessionFromRequest } from "@/lib/auth";
 
-/**
- * Assigns every browser its own session ID so user data is isolated per
- * device. The cookie persists for 10 years (effectively permanent).
- *
- * The first request for a browser has no cookie yet, so the generated ID is
- * also injected as a request header so getCurrentUser() can read it on that
- * very first render before the cookie lands.
- */
-export function middleware(request: NextRequest) {
-  const existing = request.cookies.get(COOKIE)?.value;
-  if (existing) return NextResponse.next();
+const PUBLIC_PATHS = new Set(["/login", "/register"]);
 
-  const id = crypto.randomUUID();
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
 
-  const response = NextResponse.next({
-    request: {
-      headers: new Headers({ ...Object.fromEntries(request.headers), [HEADER]: id }),
-    },
-  });
+  const session = await getSessionFromRequest(request);
 
-  response.cookies.set(COOKIE, id, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 365 * 10,
-  });
+  // Logged-in users hitting login/register → send home
+  if (session && PUBLIC_PATHS.has(pathname)) {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
 
-  return response;
+  // Unauthenticated users hitting protected routes → send to login
+  if (!session && !PUBLIC_PATHS.has(pathname)) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
+  if (!session) return NextResponse.next();
+
+  // Inject user identity so server components read it without a DB round-trip.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-user-id", session.userId);
+  requestHeaders.set("x-username", session.username);
+
+  return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/).*)"],
 };

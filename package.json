@@ -2,7 +2,7 @@
   "name": "wax",
   "version": "0.1.0",
   "private": true,
-  "description": "Letterboxd for albums \u2014 rate, review and remember what you listen to.",
+  "description": "Letterboxd for albums — rate, review and remember what you listen to.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -16,7 +16,10 @@
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",
+    "@types/bcryptjs": "^2.4.6",
+    "bcryptjs": "^3.0.3",
     "drizzle-orm": "^0.38.4",
+    "jose": "^6.2.8",
     "next": "^15.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

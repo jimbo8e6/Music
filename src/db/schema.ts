@@ -17,12 +17,17 @@ export const users = sqliteTable("users", {
   id: text("id").primaryKey(),
   username: text("username").notNull(),
   displayName: text("display_name").notNull(),
+  email: text("email"),
+  passwordHash: text("password_hash"),
   bio: text("bio"),
   avatarUrl: text("avatar_url"),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
-}, (t) => [uniqueIndex("users_username_idx").on(t.username)]);
+}, (t) => [
+  uniqueIndex("users_username_idx").on(t.username),
+  uniqueIndex("users_email_idx").on(t.email),
+]);
 
 /**
  * Local cache of albums (MusicBrainz release-groups) the user has actually

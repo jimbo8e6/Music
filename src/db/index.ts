@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { cookies, headers } from "next/headers";
+import { headers } from "next/headers";
 import type { Client } from "@libsql/core/api";
 // The `/web` entry is pure JavaScript. The default entry statically pulls in
 // the native `libsql` bindings for `file:` support, and serverless bundlers
@@ -229,6 +229,14 @@ export function ready(): Promise<void> {
           sql`CREATE UNIQUE INDEX IF NOT EXISTS collection_user_album_idx ON collection (user_id, album_id)`,
         );
       }
+
+      if (!(await columnExists("users", "email"))) {
+        await db.run(sql`ALTER TABLE users ADD email text`);
+        await db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS users_email_idx ON users (email)`);
+      }
+      if (!(await columnExists("users", "password_hash"))) {
+        await db.run(sql`ALTER TABLE users ADD password_hash text`);
+      }
     } catch (error) {
       // Serverless starts several instances at once, so two can race to apply
       // the first migration and the loser fails on "table already exists".
@@ -249,53 +257,24 @@ export function ready(): Promise<void> {
   return globalForDb.__waxReady;
 }
 
-/** Fallback used only when no session cookie exists (e.g. server actions called outside a request). */
-export const LOCAL_USER_ID = "local";
-
 /**
- * Resolves the acting user from the browser's session cookie.
- * Each browser gets its own UUID (set by middleware), so data is
- * isolated per device with no login required.
+ * Resolves the authenticated user from the x-user-id header injected by middleware.
+ * Middleware guarantees this header is present on all non-public routes.
  */
 export async function getCurrentUser(): Promise<schema.User> {
   await ready();
 
-  // Cookie is the normal path; the x-wax-session header covers the very
-  // first render before the Set-Cookie response lands on the client.
   let userId: string;
   try {
-    const cookieStore = await cookies();
     const headerStore = await headers();
-    userId =
-      cookieStore.get("wax_session")?.value ??
-      headerStore.get("x-wax-session") ??
-      LOCAL_USER_ID;
+    userId = headerStore.get("x-user-id") ?? "";
   } catch {
-    // Outside a request context (e.g. build-time or test) — use fallback.
-    userId = LOCAL_USER_ID;
+    userId = "";
   }
 
-  const existing = await db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.id, userId))
-    .get();
-
-  if (existing) return existing;
-
-  // Concurrent requests can arrive here together on a cold database, so the
-  // insert has to tolerate losing the race. Re-read rather than trusting a
-  // RETURNING clause that yields nothing when the conflict is ignored.
-  await db
-    .insert(schema.users)
-    .values({
-      id: userId,
-      username: userId,
-      displayName: "You",
-      bio: null,
-      avatarUrl: null,
-    })
-    .onConflictDoNothing();
+  if (!userId) {
+    throw new Error("No authenticated user found in request headers.");
+  }
 
   const user = await db
     .select()
@@ -304,7 +283,7 @@ export async function getCurrentUser(): Promise<schema.User> {
     .get();
 
   if (!user) {
-    throw new Error(`Could not create the local account in ${connection.url}.`);
+    throw new Error(`Authenticated user ${userId} not found in database.`);
   }
 
   return user;

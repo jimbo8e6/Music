@@ -4,14 +4,94 @@ import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { db, getCurrentUser, schema } from "@/db";
+import { db, getCurrentUser, ready, schema } from "@/db";
+import {
+  clearSessionCookie,
+  createToken,
+  hashPassword,
+  setSessionCookie,
+  verifyPassword,
+} from "@/lib/auth";
 import { getOrFetchAlbum } from "@/lib/queries";
 import { MAX_RATING, PHYSICAL_FORMATS } from "@/lib/format";
 
-const { entries, watchlist, collection } = schema;
+const { entries, watchlist, collection, users } = schema;
+
+export interface AuthFormState {
+  error?: string;
+}
 
 export interface EntryFormState {
   error?: string;
+}
+
+export async function registerUser(
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const username = String(formData.get("username") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+
+  if (!email || !username || !password) return { error: "All fields are required." };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Enter a valid email address." };
+  if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+    return { error: "Username must be 3–20 characters: letters, numbers, underscores only." };
+  }
+  if (password.length < 8) return { error: "Password must be at least 8 characters." };
+
+  await ready();
+
+  const id = crypto.randomUUID();
+  const passwordHash = await hashPassword(password);
+
+  try {
+    await db.insert(users).values({ id, username, displayName: username, email, passwordHash });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("UNIQUE") && msg.includes("email")) {
+      return { error: "An account with that email already exists." };
+    }
+    if (msg.includes("UNIQUE") && msg.includes("username")) {
+      return { error: "That username is taken." };
+    }
+    return { error: "Registration failed. Please try again." };
+  }
+
+  const token = await createToken({ userId: id, username });
+  await setSessionCookie(token);
+  redirect("/");
+}
+
+export async function loginUser(
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const identifier = String(formData.get("identifier") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+
+  if (!identifier || !password) return { error: "Email/username and password are required." };
+
+  await ready();
+
+  const isEmail = identifier.includes("@");
+  const user = isEmail
+    ? await db.select().from(users).where(eq(users.email, identifier.toLowerCase())).get()
+    : await db.select().from(users).where(eq(users.username, identifier)).get();
+
+  if (!user?.passwordHash) return { error: "Invalid email/username or password." };
+
+  const valid = await verifyPassword(password, user.passwordHash);
+  if (!valid) return { error: "Invalid email/username or password." };
+
+  const token = await createToken({ userId: user.id, username: user.username });
+  await setSessionCookie(token);
+  redirect("/");
+}
+
+export async function logout(): Promise<void> {
+  await clearSessionCookie();
+  redirect("/login");
 }
 
 function parseRating(raw: FormDataEntryValue | null): number | null {
