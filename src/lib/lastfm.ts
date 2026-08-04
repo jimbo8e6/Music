@@ -50,24 +50,38 @@ function parse(data: unknown): LastFmAlbum[] {
   }));
 }
 
+async function fetchTopAlbums(limit: number): Promise<unknown> {
+  const url = `${BASE}/?method=chart.getTopAlbums&api_key=${apiKey()}&format=json&limit=${limit}`;
+  const res = await fetch(url, { headers: { "User-Agent": "Wax/1.0" }, cache: "no-store" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json() as unknown;
+  // Last.fm returns errors as { error: number, message: string } with HTTP 200
+  const maybeErr = data as { error?: number; message?: string };
+  if (maybeErr.error) throw new Error(`Last.fm error ${maybeErr.error}: ${maybeErr.message}`);
+  return data;
+}
+
 export async function getTopAlbums({ limit = 10 }: { limit?: number } = {}): Promise<LastFmAlbum[]> {
-  // Cache key intentionally omits the API key value.
   const cacheKey = `lastfm:chart.getTopAlbums:limit=${limit}`;
   const cached = await readCache(cacheKey, CACHE_MS);
   if (cached !== null) return parse(cached);
 
   try {
-    const url = `${BASE}/?method=chart.getTopAlbums&api_key=${apiKey()}&format=json&limit=${limit}`;
-    const res = await fetch(url, { headers: { "User-Agent": "Wax/1.0" }, cache: "no-store" });
-    if (!res.ok) {
-      console.error(`[lastfm] HTTP ${res.status}`);
-      return [];
-    }
-    const data = await res.json();
+    const data = await fetchTopAlbums(limit);
     await writeCache(cacheKey, data);
     return parse(data);
   } catch (err) {
     console.error("[lastfm] getTopAlbums failed:", err);
     return [];
+  }
+}
+
+export async function checkLastFmHealth(): Promise<{ ok: boolean; count?: number; error?: string }> {
+  try {
+    const data = await fetchTopAlbums(4);
+    const count = parse(data).length;
+    return { ok: count > 0, count };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }

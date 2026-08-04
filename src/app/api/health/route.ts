@@ -30,9 +30,8 @@ export async function GET() {
   // Check Last.fm reachability (used for popular albums on the home page).
   let lastfm: { ok: boolean; count?: number; error?: string } = { ok: false };
   try {
-    const { getTopAlbums } = await import("@/lib/lastfm");
-    const albums = await getTopAlbums({ limit: 4 });
-    lastfm = { ok: albums.length > 0, count: albums.length };
+    const { checkLastFmHealth } = await import("@/lib/lastfm");
+    lastfm = await checkLastFmHealth();
   } catch (err) {
     lastfm = { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
