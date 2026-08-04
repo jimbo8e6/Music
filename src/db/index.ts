@@ -212,6 +212,23 @@ export function ready(): Promise<void> {
       if (!(await columnExists("albums", "artist_spotify_id"))) {
         await db.run(sql`ALTER TABLE albums ADD artist_spotify_id text`);
       }
+
+      // Safety: migration may have been silently swallowed by the race
+      // condition catch below on a previous cold start.
+      if (!(await tableExists("collection"))) {
+        await db.run(
+          sql`CREATE TABLE IF NOT EXISTS collection (
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            album_id TEXT NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+            formats TEXT NOT NULL,
+            created_at INTEGER DEFAULT (unixepoch()) NOT NULL
+          )`,
+        );
+        await db.run(
+          sql`CREATE UNIQUE INDEX IF NOT EXISTS collection_user_album_idx ON collection (user_id, album_id)`,
+        );
+      }
     } catch (error) {
       // Serverless starts several instances at once, so two can race to apply
       // the first migration and the loser fails on "table already exists".
