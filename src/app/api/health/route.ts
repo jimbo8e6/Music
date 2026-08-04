@@ -27,11 +27,35 @@ export async function GET() {
     };
   }
 
+  // Check Apple RSS reachability.
+  let appleRss: { ok: boolean; status?: number; count?: number; error?: string } = { ok: false };
+  try {
+    const url = "https://rss.applemarketingtools.com/api/v2/us/music/new-music/4/albums.json";
+    const res = await fetch(url, {
+      headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok) {
+      const data = (await res.json()) as { feed?: { results?: unknown[] } };
+      appleRss = { ok: true, status: res.status, count: data.feed?.results?.length ?? 0 };
+    } else {
+      appleRss = { ok: false, status: res.status, error: `HTTP ${res.status}` };
+    }
+  } catch (err) {
+    appleRss = { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+
   return NextResponse.json(
     {
       ok: database.ok,
       connection,
       database,
+      appleRss,
+      authSecret: Boolean(process.env.AUTH_SECRET?.trim()),
+      spotifyConfigured: Boolean(
+        process.env.SPOTIFY_CLIENT_ID?.trim() && process.env.SPOTIFY_CLIENT_SECRET?.trim(),
+      ),
       musicbrainzContact: Boolean(process.env.MUSICBRAINZ_CONTACT?.trim()),
       node: process.version,
     },

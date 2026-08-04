@@ -25,7 +25,14 @@ export default function HomePage() {
 
 async function NewReleasesSection() {
   const appleReleases = await fetchAppleNewReleases({ limit: 8 });
-  if (!appleReleases.length) return null;
+  if (!appleReleases.length) {
+    return (
+      <section className="space-y-4">
+        <SectionHeading title="New Releases" />
+        <p className="text-mist-500 text-sm">New releases unavailable right now.</p>
+      </section>
+    );
+  }
 
   // Resolve a Spotify ID for each Apple album so we can link into the app.
   // Results are cached in mb_cache (12h TTL).
