@@ -16,12 +16,12 @@ import {
   type ReleaseSection,
 } from "@/lib/musicbrainz";
 import {
-  SpotifyError,
-  getSpotifyArtist,
-  getSpotifyArtistAlbums,
-  isSpotifyId,
-  type SpotifyAlbumResult,
-} from "@/lib/spotify";
+  DeezerError,
+  getDeezerArtist,
+  getDeezerArtistAlbums,
+  isDeezerAlbumId,
+  type DeezerAlbumResult,
+} from "@/lib/deezer";
 import { coverArtUrlForMbid } from "@/lib/coverart";
 
 export const dynamic = "force-dynamic";
@@ -32,8 +32,8 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  if (isSpotifyId(id)) {
-    const artist = await getSpotifyArtist(id).catch(() => null);
+  if (isDeezerAlbumId(id)) {
+    const artist = await getDeezerArtist(id).catch(() => null);
     return { title: artist ? artist.name : "Artist" };
   }
   const artist = await lookupArtist(id).catch(() => null);
@@ -47,22 +47,22 @@ export default async function ArtistPage({
 }) {
   const { id } = await params;
 
-  if (isSpotifyId(id)) {
-    return <SpotifyArtistPage id={id} />;
+  if (isDeezerAlbumId(id)) {
+    return <DeezerArtistPage id={id} />;
   }
   return <MbArtistPage id={id} />;
 }
 
 /* -------------------------------------------------------------------------- */
-/* Spotify artist page                                                         */
+/* Deezer artist page                                                          */
 /* -------------------------------------------------------------------------- */
 
-async function SpotifyArtistPage({ id }: { id: string }) {
+async function DeezerArtistPage({ id }: { id: string }) {
   let artist;
   try {
-    artist = await getSpotifyArtist(id);
+    artist = await getDeezerArtist(id);
   } catch (error) {
-    if (error instanceof SpotifyError && error.status === 404) notFound();
+    if (error instanceof DeezerError && error.status === 404) notFound();
     throw error;
   }
 
@@ -70,43 +70,30 @@ async function SpotifyArtistPage({ id }: { id: string }) {
     <div className="space-y-8">
       <header className="space-y-2">
         <h1 className="text-3xl leading-tight font-bold">{artist.name}</h1>
-        {artist.genres.length > 0 && (
-          <ul className="flex flex-wrap gap-2 pt-1">
-            {artist.genres.map((genre) => (
-              <li
-                key={genre}
-                className="border-ink-700 text-mist-300 rounded-full border px-3 py-1 text-xs"
-              >
-                {genre}
-              </li>
-            ))}
-          </ul>
-        )}
       </header>
 
       <Suspense fallback={<DiscographySkeleton />}>
-        <SpotifyDiscography artistId={id} />
+        <DeezerDiscography artistId={id} />
       </Suspense>
     </div>
   );
 }
 
-const SPOTIFY_SECTION_ORDER = ["Albums", "Singles & EPs", "Compilations"] as const;
-type SpotifySection = (typeof SPOTIFY_SECTION_ORDER)[number];
+const DEEZER_SECTION_ORDER = ["Albums", "Singles & EPs", "Compilations"] as const;
+type DeezerSection = (typeof DEEZER_SECTION_ORDER)[number];
 
-function spotifySectionOf(album: SpotifyAlbumResult): SpotifySection {
+function deezerSectionOf(album: DeezerAlbumResult): DeezerSection {
   if (album.albumType === "compilation") return "Compilations";
-  if (album.albumType === "single") return "Singles & EPs";
+  if (album.albumType === "single" || album.albumType === "ep") return "Singles & EPs";
   return "Albums";
 }
 
-async function SpotifyDiscography({ artistId }: { artistId: string }) {
+async function DeezerDiscography({ artistId }: { artistId: string }) {
   let albums;
-  let albumsError: string | null = null;
   try {
-    albums = await getSpotifyArtistAlbums(artistId);
+    albums = await getDeezerArtistAlbums(artistId);
   } catch (err) {
-    albumsError = err instanceof Error ? err.message : String(err);
+    const message = err instanceof Error ? err.message : String(err);
     return (
       <div
         role="alert"
@@ -115,9 +102,7 @@ async function SpotifyDiscography({ artistId }: { artistId: string }) {
         <p className="text-sm text-red-300">
           Couldn&apos;t load albums right now. Try refreshing the page.
         </p>
-        {albumsError && (
-          <p className="text-mist-500 mt-2 font-mono text-xs">{albumsError}</p>
-        )}
+        <p className="text-mist-500 mt-2 font-mono text-xs">{message}</p>
       </div>
     );
   }
@@ -128,11 +113,11 @@ async function SpotifyDiscography({ artistId }: { artistId: string }) {
     );
   }
 
-  const ratings = await ratingsFor(albums.map((a) => a.spotifyId));
+  const ratings = await ratingsFor(albums.map((a) => a.deezerId));
 
-  const sections = new Map<SpotifySection, SpotifyAlbumResult[]>();
+  const sections = new Map<DeezerSection, DeezerAlbumResult[]>();
   for (const album of albums) {
-    const section = spotifySectionOf(album);
+    const section = deezerSectionOf(album);
     const bucket = sections.get(section) ?? [];
     bucket.push(album);
     sections.set(section, bucket);
@@ -140,7 +125,7 @@ async function SpotifyDiscography({ artistId }: { artistId: string }) {
 
   return (
     <div className="space-y-10">
-      {SPOTIFY_SECTION_ORDER.filter((s) => sections.has(s)).map((section) => {
+      {DEEZER_SECTION_ORDER.filter((s) => sections.has(s)).map((section) => {
         const releases = sections.get(section)!;
         return (
           <section key={section} className="space-y-4">
@@ -156,13 +141,13 @@ async function SpotifyDiscography({ artistId }: { artistId: string }) {
             <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-6">
               {releases.map((album, index) => (
                 <AlbumCard
-                  key={album.spotifyId}
-                  href={`/album/${album.spotifyId}`}
+                  key={album.deezerId}
+                  href={`/album/${album.deezerId}`}
                   title={album.title}
                   artist={album.artistName}
                   year={album.year}
                   coverUrl={album.artworkUrl}
-                  rating={ratings.get(album.spotifyId) ?? null}
+                  rating={ratings.get(album.deezerId) ?? null}
                   priority={section === "Albums" && index < 6}
                 />
               ))}

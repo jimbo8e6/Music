@@ -22,12 +22,19 @@ export function PlayLinks({
 
   const services = [
     {
+      name: "Deezer",
+      href: links.deezer ?? `https://www.deezer.com/search/${term}`,
+      exact: Boolean(links.deezer),
+      icon: <DeezerMark />,
+      hover: "hover:border-[#ef5466]/60 hover:text-[#ef5466]",
+      searchable: true,
+    },
+    {
       name: "Spotify",
       href: links.spotify ?? `https://open.spotify.com/search/${term}`,
       exact: Boolean(links.spotify),
       icon: <SpotifyMark />,
       hover: "hover:border-[#1db954]/60 hover:text-[#1db954]",
-      // Catalogues broad enough that a search is worth offering blind.
       searchable: true,
     },
     {
@@ -83,6 +90,14 @@ export function PlayLinks({
         </a>
       ))}
     </div>
+  );
+}
+
+function DeezerMark() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className="h-4 w-4 shrink-0 fill-current">
+      <path d="M18.95 14.4h4.05v1.6h-4.05zM18.95 11.6h4.05v1.6h-4.05zM18.95 8.8h4.05v1.6h-4.05zM18.95 6h4.05v1.6h-4.05zM18.95 17.2h4.05v1.6h-4.05zM13.3 14.4h4.05v1.6H13.3zM13.3 11.6h4.05v1.6H13.3zM13.3 17.2h4.05v1.6H13.3zM7.65 14.4h4.05v1.6H7.65zM7.65 17.2h4.05v1.6H7.65zM2 17.2h4.05v1.6H2z" />
+    </svg>
   );
 }
 

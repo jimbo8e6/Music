@@ -66,6 +66,9 @@ export const albums = sqliteTable("albums", {
   externalUrls: text("external_urls", { mode: "json" }).$type<{
     spotify?: string;
     appleMusic?: string;
+    deezer?: string;
+    bandcamp?: string;
+    youtube?: string;
   }>(),
   /** Spotify artist ID, populated for albums sourced via Spotify. */
   artistSpotifyId: text("artist_spotify_id"),

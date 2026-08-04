@@ -10,10 +10,10 @@ import { EmptyState } from "@/components/EmptyState";
 import { SearchBox } from "@/components/SearchBox";
 import { db, getOptionalCurrentUser, schema } from "@/db";
 import {
-  searchSpotifyAlbums,
-  searchSpotifyArtists,
-  SpotifyError,
-} from "@/lib/spotify";
+  DeezerError,
+  searchDeezerAlbums,
+  searchDeezerArtists,
+} from "@/lib/deezer";
 
 export const metadata = { title: "Search" };
 export const dynamic = "force-dynamic";
@@ -25,13 +25,13 @@ const MODES: { key: SearchMode; label: string; placeholder: string; hint: string
     key: "albums",
     label: "Albums",
     placeholder: "Album title…",
-    hint: "Powered by Spotify",
+    hint: "Powered by Deezer",
   },
   {
     key: "artists",
     label: "Artists",
     placeholder: "Artist or band name…",
-    hint: "Powered by Spotify",
+    hint: "Powered by Deezer",
   },
 ];
 
@@ -131,9 +131,9 @@ function ArtistListSkeleton() {
 
 function UpstreamError({ error }: { error: unknown }) {
   const message =
-    error instanceof SpotifyError
+    error instanceof DeezerError
       ? error.message
-      : "Couldn't reach Spotify. Check your connection and try again.";
+      : "Couldn't reach Deezer. Check your connection and try again.";
 
   return (
     <div
@@ -147,7 +147,7 @@ function UpstreamError({ error }: { error: unknown }) {
 
 async function ArtistResults({ query }: { query: string }) {
   try {
-    const artists = await searchSpotifyArtists(query);
+    const artists = await searchDeezerArtists(query);
 
     if (artists.length === 0) {
       return (
@@ -166,11 +166,11 @@ async function ArtistResults({ query }: { query: string }) {
         <div className="space-y-2">
           {artists.map((artist) => (
             <ArtistCard
-              key={artist.spotifyId}
-              href={`/artist/${artist.spotifyId}`}
+              key={artist.deezerId}
+              href={`/artist/${artist.deezerId}`}
               name={artist.name}
               imageUrl={artist.artworkUrl}
-              meta={artist.genres.slice(0, 3).join(" · ") || null}
+              meta={null}
             />
           ))}
         </div>
@@ -183,7 +183,7 @@ async function ArtistResults({ query }: { query: string }) {
 
 async function AlbumResults({ query }: { query: string }) {
   try {
-    const results = await searchSpotifyAlbums(query);
+    const results = await searchDeezerAlbums(query);
 
     if (results.length === 0) {
       return (
@@ -196,7 +196,7 @@ async function AlbumResults({ query }: { query: string }) {
       );
     }
 
-    const ratings = await ratingsFor(results.map((r) => r.spotifyId));
+    const ratings = await ratingsFor(results.map((r) => r.deezerId));
 
     return (
       <section className="space-y-4">
@@ -215,13 +215,13 @@ async function AlbumResults({ query }: { query: string }) {
         <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-6">
           {results.map((result, index) => (
             <AlbumCard
-              key={result.spotifyId}
-              href={`/album/${result.spotifyId}`}
+              key={result.deezerId}
+              href={`/album/${result.deezerId}`}
               title={result.title}
               artist={result.artistName}
               year={result.year}
               coverUrl={result.artworkUrl}
-              rating={ratings.get(result.spotifyId) ?? null}
+              rating={ratings.get(result.deezerId) ?? null}
               badge={result.albumType !== "album" ? capitalise(result.albumType) : null}
               priority={index < 6}
             />

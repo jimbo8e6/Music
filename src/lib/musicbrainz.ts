@@ -556,6 +556,7 @@ function betterOf(a: RankedResult, b: RankedResult): boolean {
 export interface ExternalLinks {
   spotify?: string;
   appleMusic?: string;
+  deezer?: string;
   bandcamp?: string;
   youtube?: string;
 }

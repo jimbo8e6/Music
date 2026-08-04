@@ -14,6 +14,7 @@ import {
   type ExternalLinks,
   type Track,
 } from "@/lib/musicbrainz";
+import { getDeezerAlbum, isDeezerAlbumId } from "@/lib/deezer";
 import { getSpotifyAlbum, isSpotifyId } from "@/lib/spotify";
 
 export interface EntryWithAlbum {
@@ -34,6 +35,53 @@ export const getOrFetchAlbum = cache(async (id: string): Promise<Album | null> =
 
   // local-* entries must already exist in the DB
   if (id.startsWith("local-")) return null;
+
+  // Deezer IDs (numeric strings): fetch from Deezer
+  if (isDeezerAlbumId(id)) {
+    const detail = await getDeezerAlbum(id);
+
+    let primaryType = "Album";
+    let secondaryTypes: string[] = [];
+    if (detail.albumType === "single" || detail.albumType === "ep") {
+      primaryType = "Single";
+    } else if (detail.albumType === "compilation") {
+      primaryType = "Album";
+      secondaryTypes = ["Compilation"];
+    }
+
+    const inserted = await db
+      .insert(albums)
+      .values({
+        id,
+        mbid: null,
+        title: detail.title,
+        artistName: detail.artistName,
+        artistMbid: null,
+        artistSpotifyId: detail.artistDeezerId,
+        releaseDate: detail.releaseDate,
+        year: detail.year,
+        primaryType,
+        secondaryTypes,
+        genres: detail.genres,
+        trackCount: detail.trackCount,
+        primaryReleaseId: null,
+        tracks: detail.tracks,
+        externalUrls: detail.deezerUrl ? { deezer: detail.deezerUrl } : {},
+        coverArtUrl: detail.artworkUrl,
+      })
+      .onConflictDoUpdate({
+        target: albums.id,
+        set: {
+          title: detail.title,
+          artistName: detail.artistName,
+          coverArtUrl: detail.artworkUrl,
+        },
+      })
+      .returning()
+      .get();
+
+    return inserted ?? null;
+  }
 
   // Spotify IDs (22-char base-62): fetch from Spotify
   if (isSpotifyId(id)) {

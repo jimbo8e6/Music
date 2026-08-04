@@ -36,13 +36,13 @@ export async function GET() {
     lastfm = { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 
-  // Check Spotify reachability (used for artist pages and album search).
-  let spotify: { ok: boolean; count?: number; error?: string } = { ok: false };
+  // Check Deezer reachability (used for artist pages and album search — no credentials needed).
+  let deezer: { ok: boolean; count?: number; error?: string } = { ok: false };
   try {
-    const { checkSpotifyHealth } = await import("@/lib/spotify");
-    spotify = await checkSpotifyHealth();
+    const { checkDeezerHealth } = await import("@/lib/deezer");
+    deezer = await checkDeezerHealth();
   } catch (err) {
-    spotify = { ok: false, error: err instanceof Error ? err.message : String(err) };
+    deezer = { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 
   return NextResponse.json(
@@ -51,12 +51,9 @@ export async function GET() {
       connection,
       database,
       lastfm,
-      spotify,
+      deezer,
       lastfmConfigured: Boolean(process.env.LASTFM_API_KEY?.trim()),
       authSecret: Boolean(process.env.AUTH_SECRET?.trim()),
-      spotifyConfigured: Boolean(
-        process.env.SPOTIFY_CLIENT_ID?.trim() && process.env.SPOTIFY_CLIENT_SECRET?.trim(),
-      ),
       musicbrainzContact: Boolean(process.env.MUSICBRAINZ_CONTACT?.trim()),
       node: process.version,
     },
