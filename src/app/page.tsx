@@ -2,9 +2,8 @@ import { Suspense } from "react";
 import Link from "next/link";
 
 import { AlbumCard } from "@/components/AlbumCard";
-import { fetchAppleNewReleases, type AppleRelease } from "@/lib/applemusic";
 import { coverArtUrl } from "@/lib/coverart";
-import { searchSpotifyAlbums } from "@/lib/spotify";
+import { getSpotifyNewReleases, type SpotifyAlbumResult } from "@/lib/spotify";
 import { getHomeRecommendations, type HomeRecommendation } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -24,8 +23,9 @@ export default function HomePage() {
 }
 
 async function NewReleasesSection() {
-  const appleReleases = await fetchAppleNewReleases({ limit: 8 });
-  if (!appleReleases.length) {
+  const releases: SpotifyAlbumResult[] = await getSpotifyNewReleases(10);
+
+  if (!releases.length) {
     return (
       <section className="space-y-4">
         <SectionHeading title="New Releases" />
@@ -34,43 +34,24 @@ async function NewReleasesSection() {
     );
   }
 
-  // Resolve a Spotify ID for each Apple album so we can link into the app.
-  // Results are cached in mb_cache (12h TTL).
-  const releases = await Promise.all(appleReleases.map(resolveAppleRelease));
-
   return (
     <section className="space-y-4">
       <SectionHeading title="New Releases" />
       <ScrollRow>
-        {releases.map(r => {
-          const href = r.spotifyId
-            ? `/album/${r.spotifyId}`
-            : `/search?q=${encodeURIComponent(`${r.name} ${r.artistName}`)}`;
-          return (
-            <CardSlot key={r.id}>
-              <AlbumCard
-                href={href}
-                title={r.name}
-                artist={r.artistName}
-                year={r.releaseDate ? new Date(r.releaseDate).getFullYear() : null}
-                coverUrl={r.artworkUrl}
-              />
-            </CardSlot>
-          );
-        })}
+        {releases.map(r => (
+          <CardSlot key={r.spotifyId}>
+            <AlbumCard
+              href={`/album/${r.spotifyId}`}
+              title={r.title}
+              artist={r.artistName}
+              year={r.year}
+              coverUrl={r.artworkUrl}
+            />
+          </CardSlot>
+        ))}
       </ScrollRow>
     </section>
   );
-}
-
-/** Looks up the Spotify ID for an Apple Music album so we can link into the app. */
-async function resolveAppleRelease(r: AppleRelease): Promise<AppleRelease & { spotifyId: string | null }> {
-  try {
-    const results = await searchSpotifyAlbums(`${r.name} ${r.artistName}`, { limit: 1 });
-    return { ...r, spotifyId: results[0]?.spotifyId ?? null };
-  } catch {
-    return { ...r, spotifyId: null };
-  }
 }
 
 async function RecommendationsSection() {

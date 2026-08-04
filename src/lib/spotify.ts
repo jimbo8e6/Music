@@ -115,6 +115,43 @@ function yearOf(date: string | undefined | null): number | null {
 }
 
 /* -------------------------------------------------------------------------- */
+/* New releases (via editorial playlist)                                       */
+/* -------------------------------------------------------------------------- */
+
+// Spotify's "New Music Friday" (US). Spotify maintains this weekly.
+const NEW_MUSIC_FRIDAY_ID = "37i9dQZF1DX4JAvHpjipBk";
+
+interface RawPlaylistTrackPage {
+  items: Array<{ track: { album: RawSpotifyAlbum } | null } | null>;
+}
+
+/**
+ * Returns up to `limit` distinct albums from Spotify's New Music Friday
+ * playlist. Falls back to an empty array on any error.
+ */
+export async function getSpotifyNewReleases(limit = 10): Promise<SpotifyAlbumResult[]> {
+  try {
+    const data = await spotifyFetch<RawPlaylistTrackPage>(
+      `/playlists/${NEW_MUSIC_FRIDAY_ID}/tracks`,
+      { limit: "50" },
+      6 * 60 * 60 * 1000,
+    );
+    const seen = new Set<string>();
+    const albums: SpotifyAlbumResult[] = [];
+    for (const item of data?.items ?? []) {
+      const album = item?.track?.album;
+      if (!album?.id || seen.has(album.id)) continue;
+      seen.add(album.id);
+      albums.push(toAlbumResult(album));
+      if (albums.length >= limit) break;
+    }
+    return albums;
+  } catch {
+    return [];
+  }
+}
+
+/* -------------------------------------------------------------------------- */
 /* Album search                                                                */
 /* -------------------------------------------------------------------------- */
 
