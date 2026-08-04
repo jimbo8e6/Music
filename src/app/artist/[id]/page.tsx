@@ -79,12 +79,15 @@ async function DeezerArtistPage({ id }: { id: string }) {
   );
 }
 
-const DEEZER_SECTION_ORDER = ["Albums", "Singles & EPs", "Compilations"] as const;
+const DEEZER_SECTION_ORDER = ["Albums", "Live", "Singles & EPs", "Compilations"] as const;
 type DeezerSection = (typeof DEEZER_SECTION_ORDER)[number];
+
+const LIVE_TITLE_RE = /\blive\b|concert|in concert|unplugged|acoustic session/i;
 
 function deezerSectionOf(album: DeezerAlbumResult): DeezerSection {
   if (album.albumType === "compilation") return "Compilations";
   if (album.albumType === "single" || album.albumType === "ep") return "Singles & EPs";
+  if (album.albumType === "live" || LIVE_TITLE_RE.test(album.title)) return "Live";
   return "Albums";
 }
 
