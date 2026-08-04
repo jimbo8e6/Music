@@ -8,7 +8,7 @@ import { AlbumGridSkeleton } from "@/components/AlbumGridSkeleton";
 import { ArtistCard } from "@/components/ArtistCard";
 import { EmptyState } from "@/components/EmptyState";
 import { SearchBox } from "@/components/SearchBox";
-import { db, getCurrentUser, schema } from "@/db";
+import { db, getOptionalCurrentUser, schema } from "@/db";
 import {
   searchSpotifyAlbums,
   searchSpotifyArtists,
@@ -241,7 +241,9 @@ function capitalise(s: string): string {
 async function ratingsFor(ids: string[]): Promise<Map<string, number | null>> {
   if (ids.length === 0) return new Map();
 
-  const user = await getCurrentUser();
+  const user = await getOptionalCurrentUser();
+  if (!user) return new Map();
+
   const rows = await db
     .select({ albumId: schema.entries.albumId, rating: schema.entries.rating })
     .from(schema.entries)
