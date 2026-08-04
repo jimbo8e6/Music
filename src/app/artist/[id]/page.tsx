@@ -118,8 +118,12 @@ async function DeezerDiscography({ artistId, artistName }: { artistId: string; a
 
   const ratings = await ratingsFor(albums.map((a) => a.deezerId));
 
+  const sorted = [...albums].sort((a, b) =>
+    (b.releaseDate ?? "0000") > (a.releaseDate ?? "0000") ? 1 : -1,
+  );
+
   const sections = new Map<DeezerSection, DeezerAlbumResult[]>();
-  for (const album of albums) {
+  for (const album of sorted) {
     const section = deezerSectionOf(album);
     const bucket = sections.get(section) ?? [];
     bucket.push(album);
