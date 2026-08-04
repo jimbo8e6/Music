@@ -1,5 +1,9 @@
 /** Half-star rating helpers. Ratings are stored as integers 1–10. */
 
+export const PHYSICAL_FORMATS = ["Vinyl", "CD", "Cassette", "MiniDisc", "8-Track"] as const;
+export type PhysicalFormat = (typeof PHYSICAL_FORMATS)[number];
+
+
 export const MAX_RATING = 10;
 
 export function ratingToStars(rating: number): number {

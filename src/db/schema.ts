@@ -129,6 +129,21 @@ export const mbCache = sqliteTable("mb_cache", {
   fetchedAt: integer("fetched_at", { mode: "timestamp" }).notNull(),
 });
 
+/** Physical formats the user owns an album on. Independent of ratings. */
+export const collection = sqliteTable("collection", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  albumId: text("album_id")
+    .notNull()
+    .references(() => albums.id, { onDelete: "cascade" }),
+  formats: text("formats", { mode: "json" }).$type<string[]>().notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+}, (t) => [uniqueIndex("collection_user_album_idx").on(t.userId, t.albumId)]);
+
 /** Albums the user wants to hear but hasn't logged yet. */
 export const watchlist = sqliteTable("watchlist", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -147,3 +162,4 @@ export type User = typeof users.$inferSelect;
 export type Album = typeof albums.$inferSelect;
 export type NewAlbum = typeof albums.$inferInsert;
 export type Entry = typeof entries.$inferSelect;
+export type CollectionEntry = typeof collection.$inferSelect;

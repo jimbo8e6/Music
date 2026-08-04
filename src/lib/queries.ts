@@ -21,7 +21,7 @@ export interface EntryWithAlbum {
   album: Album;
 }
 
-const { albums, entries, watchlist } = schema;
+const { albums, entries, watchlist, collection } = schema;
 
 /**
  * Returns the cached album, fetching and caching it from MusicBrainz on a miss.
@@ -306,6 +306,27 @@ export async function getWatchlist(): Promise<Album[]> {
     .orderBy(desc(watchlist.createdAt));
 
   return rows.map((row) => row.album);
+}
+
+export async function getOwnedFormats(albumId: string): Promise<string[]> {
+  const user = await getCurrentUser();
+  const row = await db
+    .select()
+    .from(collection)
+    .where(and(eq(collection.userId, user.id), eq(collection.albumId, albumId)))
+    .get();
+  return row?.formats ?? [];
+}
+
+export async function getCollection(): Promise<{ album: Album; formats: string[] }[]> {
+  const user = await getCurrentUser();
+  const rows = await db
+    .select({ album: albums, formats: collection.formats })
+    .from(collection)
+    .innerJoin(albums, eq(collection.albumId, albums.id))
+    .where(eq(collection.userId, user.id))
+    .orderBy(desc(collection.createdAt));
+  return rows;
 }
 
 export async function isOnWatchlist(albumId: string): Promise<boolean> {

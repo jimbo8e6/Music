@@ -3,7 +3,7 @@ import Link from "next/link";
 import { AlbumCard } from "@/components/AlbumCard";
 import { EmptyState } from "@/components/EmptyState";
 import { coverArtUrl } from "@/lib/coverart";
-import { getEntries, type LibrarySort } from "@/lib/queries";
+import { getCollection, getEntries, type LibrarySort } from "@/lib/queries";
 
 export const metadata = { title: "Library" };
 export const dynamic = "force-dynamic";
@@ -22,17 +22,64 @@ const FILTERS = [
   { key: "reviews", label: "Reviewed" },
 ] as const;
 
+const VIEWS = [
+  { key: "ratings", label: "Ratings" },
+  { key: "collection", label: "Collection" },
+] as const;
+
+type ViewKey = (typeof VIEWS)[number]["key"];
+
 export default async function LibraryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sort?: string; filter?: string }>;
+  searchParams: Promise<{ sort?: string; filter?: string; view?: string }>;
 }) {
   const params = await searchParams;
+  const view: ViewKey = params.view === "collection" ? "collection" : "ratings";
 
-  const sort = (SORTS.find((s) => s.key === params.sort)?.key ??
-    "recent") as LibrarySort;
-  const filter =
-    FILTERS.find((f) => f.key === params.filter)?.key ?? "all";
+  if (view === "collection") {
+    const items = await getCollection();
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <h1 className="text-xl font-semibold">
+            Your library
+            <span className="text-mist-400 ml-2 text-sm font-normal tabular-nums">
+              {items.length}
+            </span>
+          </h1>
+          <ViewTabs active={view} />
+        </div>
+
+        {items.length === 0 ? (
+          <EmptyState
+            title="Nothing in your collection yet"
+            body='Open any album and tap "Own this album?" to add it here.'
+            actionHref="/search"
+            actionLabel="Find an album"
+          />
+        ) : (
+          <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-6">
+            {items.map(({ album, formats }, index) => (
+              <AlbumCard
+                key={album.id}
+                href={`/album/${album.id}`}
+                title={album.title}
+                artist={album.artistName}
+                year={album.year}
+                coverUrl={coverArtUrl(album, 500)}
+                badge={formats.join(" · ")}
+                priority={index < 6}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const sort = (SORTS.find((s) => s.key === params.sort)?.key ?? "recent") as LibrarySort;
+  const filter = FILTERS.find((f) => f.key === params.filter)?.key ?? "all";
 
   const rows = await getEntries({
     sort,
@@ -50,7 +97,8 @@ export default async function LibraryPage({
           </span>
         </h1>
 
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          <ViewTabs active={view} />
           <Tabs
             options={FILTERS.map((f) => ({ ...f }))}
             active={filter}
@@ -94,6 +142,26 @@ export default async function LibraryPage({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function ViewTabs({ active }: { active: ViewKey }) {
+  return (
+    <div className="flex items-center gap-3">
+      {VIEWS.map((v) => (
+        <Link
+          key={v.key}
+          href={`/library?view=${v.key}`}
+          className={
+            v.key === active
+              ? "text-accent-400 text-xs font-semibold"
+              : "text-mist-400 hover:text-mist-100 text-xs transition-colors"
+          }
+        >
+          {v.label}
+        </Link>
+      ))}
     </div>
   );
 }

@@ -6,9 +6,9 @@ import { redirect } from "next/navigation";
 
 import { db, getCurrentUser, schema } from "@/db";
 import { getOrFetchAlbum } from "@/lib/queries";
-import { MAX_RATING } from "@/lib/format";
+import { MAX_RATING, PHYSICAL_FORMATS } from "@/lib/format";
 
-const { entries, watchlist } = schema;
+const { entries, watchlist, collection } = schema;
 
 export interface EntryFormState {
   error?: string;
@@ -88,6 +88,35 @@ export async function deleteEntry(formData: FormData): Promise<void> {
   revalidatePath("/");
   revalidatePath("/library");
   revalidatePath(`/album/${albumId}`);
+}
+
+/** Saves which physical formats the user owns this album on. Empty selection removes it. */
+export async function setOwnedFormats(formData: FormData): Promise<void> {
+  const albumId = String(formData.get("albumId") ?? "").trim();
+  if (!albumId) return;
+
+  const album = await getOrFetchAlbum(albumId).catch(() => null);
+  if (!album) return;
+
+  const user = await getCurrentUser();
+  const formats = PHYSICAL_FORMATS.filter((f) => formData.get(`format_${f}`) === "on");
+
+  if (formats.length === 0) {
+    await db
+      .delete(collection)
+      .where(and(eq(collection.userId, user.id), eq(collection.albumId, album.id)));
+  } else {
+    await db
+      .insert(collection)
+      .values({ userId: user.id, albumId: album.id, formats })
+      .onConflictDoUpdate({
+        target: [collection.userId, collection.albumId],
+        set: { formats },
+      });
+  }
+
+  revalidatePath(`/album/${album.id}`);
+  revalidatePath("/library");
 }
 
 /** Adds to, or removes from, the listen-later list. */

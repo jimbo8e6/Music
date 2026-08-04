@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 
 import { AlbumSleeve } from "@/components/AlbumSleeve";
+import { OwnedFormatsButton } from "@/components/OwnedFormatsButton";
 import { PlayLinks } from "@/components/PlayLinks";
 import { Stars } from "@/components/Stars";
 import { deleteEntry, toggleWatchlist } from "@/lib/actions";
@@ -12,6 +13,7 @@ import {
   getEntryForAlbum,
   getExternalLinks,
   getOrFetchAlbum,
+  getOwnedFormats,
   getTrackCount,
   isOnWatchlist,
 } from "@/lib/queries";
@@ -37,9 +39,10 @@ export default async function AlbumPage({
   const { id } = await params;
   const album = await loadAlbumOrNotFound(id);
 
-  const [entry, onWatchlist] = await Promise.all([
+  const [entry, onWatchlist, ownedFormats] = await Promise.all([
     getEntryForAlbum(album.id),
     isOnWatchlist(album.id),
+    getOwnedFormats(album.id),
   ]);
 
   // The tracklist needs a second MusicBrainz request, which the rate limiter
@@ -77,6 +80,8 @@ export default async function AlbumPage({
                 </button>
               </form>
             )}
+
+            <OwnedFormatsButton albumId={album.id} initialFormats={ownedFormats} />
 
             {/* Search links render immediately; the exact album link replaces
                 them if MusicBrainz has one. Same shape either way, so nothing
