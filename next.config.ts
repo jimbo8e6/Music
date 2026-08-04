@@ -10,6 +10,8 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "archive.org" },
       // Spotify album and artist artwork
       { protocol: "https", hostname: "i.scdn.co" },
+      // Deezer album and artist artwork
+      { protocol: "https", hostname: "e-cdns-images.dzcdn.net" },
       // Apple Music RSS feed artwork (mzstatic CDN)
       { protocol: "https", hostname: "*.mzstatic.com" },
     ],
