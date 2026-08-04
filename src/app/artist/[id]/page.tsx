@@ -73,7 +73,7 @@ async function DeezerArtistPage({ id }: { id: string }) {
       </header>
 
       <Suspense fallback={<DiscographySkeleton />}>
-        <DeezerDiscography artistId={id} />
+        <DeezerDiscography artistId={id} artistName={artist.name} />
       </Suspense>
     </div>
   );
@@ -88,10 +88,10 @@ function deezerSectionOf(album: DeezerAlbumResult): DeezerSection {
   return "Albums";
 }
 
-async function DeezerDiscography({ artistId }: { artistId: string }) {
+async function DeezerDiscography({ artistId, artistName }: { artistId: string; artistName: string }) {
   let albums;
   try {
-    albums = await getDeezerArtistAlbums(artistId);
+    albums = await getDeezerArtistAlbums(artistId, artistName);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return (

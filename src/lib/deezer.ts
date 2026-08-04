@@ -72,7 +72,8 @@ function yearOf(date: string | undefined | null): number | null {
 interface RawDeezerAlbum {
   id: number;
   title: string;
-  artist: { id: number; name: string };
+  /** Present in search results; absent in artist album listings (artist is implied). */
+  artist?: { id: number; name: string };
   cover_xl: string | null;
   release_date: string;
   record_type: string;
@@ -150,12 +151,15 @@ export interface DeezerArtistDetail extends DeezerArtistResult {
 /* Converters                                                                  */
 /* -------------------------------------------------------------------------- */
 
-function toAlbumResult(album: RawDeezerAlbum): DeezerAlbumResult {
+function toAlbumResult(
+  album: RawDeezerAlbum,
+  fallbackArtist?: { id: string; name: string },
+): DeezerAlbumResult {
   return {
     deezerId: String(album.id),
     title: album.title,
-    artistName: album.artist.name,
-    artistDeezerId: String(album.artist.id),
+    artistName: album.artist?.name ?? fallbackArtist?.name ?? "",
+    artistDeezerId: album.artist ? String(album.artist.id) : (fallbackArtist?.id ?? ""),
     year: yearOf(album.release_date),
     releaseDate: album.release_date ?? null,
     artworkUrl: album.cover_xl ?? null,
@@ -188,7 +192,7 @@ export async function searchDeezerAlbums(
     "/search/album",
     { q: query.trim(), limit: "20" },
   );
-  return (data.data ?? []).map(toAlbumResult);
+  return (data.data ?? []).map((a) => toAlbumResult(a));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -247,7 +251,11 @@ export async function getDeezerArtist(id: string): Promise<DeezerArtistDetail> {
   return { ...toArtistResult(artist), disambiguation: null };
 }
 
-export async function getDeezerArtistAlbums(artistId: string): Promise<DeezerAlbumResult[]> {
+export async function getDeezerArtistAlbums(
+  artistId: string,
+  artistName?: string,
+): Promise<DeezerAlbumResult[]> {
+  const fallbackArtist = artistName ? { id: artistId, name: artistName } : undefined;
   const all: DeezerAlbumResult[] = [];
   const seen = new Set<string>();
   let index = 0;
@@ -272,7 +280,7 @@ export async function getDeezerArtistAlbums(artistId: string): Promise<DeezerAlb
       const id = String(album.id);
       if (!seen.has(id)) {
         seen.add(id);
-        all.push(toAlbumResult(album));
+        all.push(toAlbumResult(album, fallbackArtist));
       }
     }
 
