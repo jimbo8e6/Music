@@ -381,6 +381,16 @@ export async function getCollection(): Promise<{ album: Album; formats: string[]
   return rows;
 }
 
+export async function getProfileCollection(userId: string): Promise<{ album: Album; formats: string[] }[]> {
+  await ready();
+  return db
+    .select({ album: albums, formats: collection.formats })
+    .from(collection)
+    .innerJoin(albums, eq(collection.albumId, albums.id))
+    .where(eq(collection.userId, userId))
+    .orderBy(desc(collection.createdAt));
+}
+
 export async function isOnWatchlist(albumId: string): Promise<boolean> {
   const user = await getOptionalCurrentUser();
   if (!user) return false;

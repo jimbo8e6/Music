@@ -8,6 +8,7 @@ import { followUser, unfollowUser } from "@/lib/actions";
 import {
   getUserByUsername,
   getProfileEntries,
+  getProfileCollection,
   getProfileStats,
   isFollowing,
 } from "@/lib/queries";
@@ -21,10 +22,14 @@ export async function generateMetadata({ params }: { params: Promise<{ username:
 
 export default async function ProfilePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ username: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
-  const { username } = await params;
+  const [{ username }, { tab }] = await Promise.all([params, searchParams]);
+  const activeTab = tab === "collection" ? "collection" : "ratings";
+
   const profileUser = await getUserByUsername(username);
   if (!profileUser) notFound();
 
@@ -32,8 +37,9 @@ export default async function ProfilePage({
   const currentUserId = headerStore.get("x-user-id") ?? "";
   const isOwnProfile = currentUserId === profileUser.id;
 
-  const [entries, stats, following] = await Promise.all([
-    getProfileEntries(profileUser.id, { limit: 24 }),
+  const [entries, collectionItems, stats, following] = await Promise.all([
+    activeTab === "ratings" ? getProfileEntries(profileUser.id, { limit: 24 }) : Promise.resolve([]),
+    activeTab === "collection" ? getProfileCollection(profileUser.id) : Promise.resolve([]),
     getProfileStats(profileUser.id),
     isOwnProfile ? Promise.resolve(false) : isFollowing(currentUserId, profileUser.id),
   ]);
@@ -90,11 +96,28 @@ export default async function ProfilePage({
         )}
       </div>
 
-      {entries.length > 0 ? (
-        <section className="space-y-4">
-          <h2 className="text-mist-400 border-ink-800 border-b pb-2 text-xs font-semibold uppercase tracking-wider">
-            {isOwnProfile ? "Your ratings" : "Recent ratings"}
-          </h2>
+      {/* Tabs */}
+      <div className="border-ink-800 flex gap-6 border-b">
+        {[
+          { key: "ratings", label: "Ratings" },
+          { key: "collection", label: "Collection" },
+        ].map(({ key, label }) => (
+          <Link
+            key={key}
+            href={`/profile/${profileUser.username}${key === "ratings" ? "" : `?tab=${key}`}`}
+            className={
+              activeTab === key
+                ? "text-mist-100 border-accent-500 -mb-px border-b-2 pb-2 text-sm font-medium"
+                : "text-mist-400 hover:text-mist-200 pb-2 text-sm transition-colors"
+            }
+          >
+            {label}
+          </Link>
+        ))}
+      </div>
+
+      {activeTab === "ratings" && (
+        entries.length > 0 ? (
           <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-6">
             {entries.map(({ entry, album }, i) => (
               <AlbumCard
@@ -110,9 +133,30 @@ export default async function ProfilePage({
               />
             ))}
           </div>
-        </section>
-      ) : (
-        <p className="text-mist-500 text-sm">No albums logged yet.</p>
+        ) : (
+          <p className="text-mist-500 text-sm">No albums logged yet.</p>
+        )
+      )}
+
+      {activeTab === "collection" && (
+        collectionItems.length > 0 ? (
+          <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-6">
+            {collectionItems.map(({ album, formats }, i) => (
+              <AlbumCard
+                key={album.id}
+                href={`/album/${album.id}`}
+                title={album.title}
+                artist={album.artistName}
+                year={album.year}
+                coverUrl={coverArtUrl(album, 500)}
+                badge={formats.join(" · ")}
+                priority={i < 6}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="text-mist-500 text-sm">No physical albums in collection yet.</p>
+        )
       )}
     </div>
   );
