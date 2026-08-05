@@ -137,6 +137,14 @@ export async function removeFavouriteAlbum(position: number): Promise<void> {
   revalidatePath(`/profile/${user.username}`);
 }
 
+export async function updateAvatar(dataUrl: string): Promise<void> {
+  if (!dataUrl.startsWith("data:image/")) throw new Error("Invalid image data.");
+  if (dataUrl.length > 300_000) throw new Error("Image too large.");
+  const user = await getCurrentUser();
+  await db.update(users).set({ avatarUrl: dataUrl }).where(eq(users.id, user.id));
+  revalidatePath(`/profile/${user.username}`);
+}
+
 function parseRating(raw: FormDataEntryValue | null): number | null {
   if (raw === null || raw === "" || raw === "0") return null;
   const value = Number(raw);

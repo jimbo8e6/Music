@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 
 import { AlbumCard } from "@/components/AlbumCard";
+import { AvatarDisplay } from "@/components/AvatarEditor";
 import { FavouriteAlbums } from "@/components/FavouriteAlbums";
 import { coverArtUrl } from "@/lib/coverart";
 import { followUser, unfollowUser } from "@/lib/actions";
@@ -51,6 +52,13 @@ export default async function ProfilePage({
     <div className="space-y-8">
       <div className="flex items-start justify-between gap-4">
         <div>
+          <div className="mb-3">
+            <AvatarDisplay
+              avatarUrl={profileUser.avatarUrl ?? null}
+              displayName={profileUser.displayName}
+              isOwner={isOwnProfile}
+            />
+          </div>
           <h1 className="text-xl font-semibold">{profileUser.displayName}</h1>
           <p className="text-mist-400 text-sm">@{profileUser.username}</p>
           {profileUser.bio && (
