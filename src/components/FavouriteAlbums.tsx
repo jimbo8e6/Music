@@ -99,10 +99,9 @@ function Slot({
 
   return (
     <div className="group relative aspect-square">
-      <button
-        onClick={isOwner ? onOpen : undefined}
-        className={`block h-full w-full overflow-hidden rounded-sm ${isOwner ? "cursor-pointer" : "cursor-default"}`}
-        disabled={!isOwner}
+      <a
+        href={`/album/${album.id}`}
+        className="block h-full w-full overflow-hidden rounded-sm"
       >
         {src ? (
           <Image
@@ -116,12 +115,7 @@ function Slot({
         ) : (
           <Fallback title={album.title} artist={album.artistName} />
         )}
-        {isOwner && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-            <span className="text-xs font-medium text-white">Change</span>
-          </div>
-        )}
-      </button>
+      </a>
       {isOwner && (
         <button
           onClick={handleRemove}
