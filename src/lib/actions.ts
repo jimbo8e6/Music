@@ -12,13 +12,20 @@ import {
   setSessionCookie,
   verifyPassword,
 } from "@/lib/auth";
+import { sendPasswordResetEmail, sendVerificationEmail } from "@/lib/email";
 import { getOrFetchAlbum } from "@/lib/queries";
 import { MAX_RATING, PHYSICAL_FORMATS } from "@/lib/format";
 
-const { entries, watchlist, collection, users, follows, favourites } = schema;
+const { entries, watchlist, collection, users, follows, favourites, emailTokens } = schema;
+
+function generateToken(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 export interface AuthFormState {
   error?: string;
+  success?: boolean;
 }
 
 export interface EntryFormState {
@@ -58,9 +65,15 @@ export async function registerUser(
     return { error: "Registration failed. Please try again." };
   }
 
-  const token = await createToken({ userId: id, username });
-  await setSessionCookie(token);
-  redirect("/");
+  // Issue verification token and send email (non-blocking — failure doesn't abort registration)
+  const verifyToken = generateToken();
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  await db.insert(emailTokens).values({ userId: id, token: verifyToken, type: "verify", expiresAt });
+  sendVerificationEmail(email, verifyToken).catch(console.error);
+
+  const sessionToken = await createToken({ userId: id, username });
+  await setSessionCookie(sessionToken);
+  redirect("/register/check-email");
 }
 
 export async function loginUser(
@@ -92,6 +105,56 @@ export async function loginUser(
 export async function logout(): Promise<void> {
   await clearSessionCookie();
   redirect("/login");
+}
+
+export async function requestPasswordReset(
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  if (!email) return { error: "Please enter your email address." };
+
+  await ready();
+  const user = await db.select().from(users).where(eq(users.email, email)).get();
+
+  // Always return success to avoid leaking which emails are registered
+  if (user) {
+    // Delete any existing reset tokens for this user
+    await db.delete(emailTokens).where(
+      and(eq(emailTokens.userId, user.id), eq(emailTokens.type, "reset")),
+    );
+    const token = generateToken();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    await db.insert(emailTokens).values({ userId: user.id, token, type: "reset", expiresAt });
+    sendPasswordResetEmail(email, token).catch(console.error);
+  }
+
+  return { success: true };
+}
+
+export async function resetPassword(
+  token: string,
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const password = String(formData.get("password") ?? "");
+  const confirm = String(formData.get("confirm") ?? "");
+
+  if (password.length < 8) return { error: "Password must be at least 8 characters." };
+  if (password !== confirm) return { error: "Passwords don't match." };
+
+  await ready();
+
+  const row = await db.select().from(emailTokens).where(eq(emailTokens.token, token)).get();
+  if (!row || row.type !== "reset" || row.expiresAt < new Date()) {
+    return { error: "This reset link is invalid or has expired. Please request a new one." };
+  }
+
+  const passwordHash = await hashPassword(password);
+  await db.update(users).set({ passwordHash }).where(eq(users.id, row.userId));
+  await db.delete(emailTokens).where(eq(emailTokens.id, row.id));
+
+  redirect("/login?reset=1");
 }
 
 export async function followUser(formData: FormData): Promise<void> {

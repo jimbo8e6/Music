@@ -254,6 +254,23 @@ export function ready(): Promise<void> {
         );
       }
 
+      if (!(await columnExists("users", "email_verified"))) {
+        await db.run(sql`ALTER TABLE users ADD email_verified INTEGER NOT NULL DEFAULT 0`);
+      }
+
+      if (!(await tableExists("email_tokens"))) {
+        await db.run(sql`CREATE TABLE IF NOT EXISTS email_tokens (
+          id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          token TEXT NOT NULL,
+          type TEXT NOT NULL,
+          expires_at INTEGER NOT NULL,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch())
+        )`);
+        await db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS email_tokens_token_idx ON email_tokens (token)`);
+        await db.run(sql`CREATE INDEX IF NOT EXISTS email_tokens_user_idx ON email_tokens (user_id)`);
+      }
+
       if (!(await tableExists("follows"))) {
         await db.run(
           sql`CREATE TABLE IF NOT EXISTS follows (

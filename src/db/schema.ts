@@ -21,12 +21,28 @@ export const users = sqliteTable("users", {
   passwordHash: text("password_hash"),
   bio: text("bio"),
   avatarUrl: text("avatar_url"),
+  emailVerified: integer("email_verified", { mode: "boolean" }).notNull().default(false),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
 }, (t) => [
   uniqueIndex("users_username_idx").on(t.username),
   uniqueIndex("users_email_idx").on(t.email),
+]);
+
+/** Time-limited tokens for email verification and password reset. */
+export const emailTokens = sqliteTable("email_tokens", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull(),
+  type: text("type").notNull(), // 'verify' | 'reset'
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+}, (t) => [
+  uniqueIndex("email_tokens_token_idx").on(t.token),
+  index("email_tokens_user_idx").on(t.userId),
 ]);
 
 /**
@@ -201,6 +217,7 @@ export const watchlist = sqliteTable("watchlist", {
     .default(sql`(unixepoch())`),
 }, (t) => [uniqueIndex("watchlist_user_album_idx").on(t.userId, t.albumId)]);
 
+export type EmailToken = typeof emailTokens.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type Album = typeof albums.$inferSelect;
 export type NewAlbum = typeof albums.$inferInsert;

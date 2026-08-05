@@ -22,7 +22,8 @@
     "jose": "^6.2.8",
     "next": "^15.1.6",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "resend": "^6.18.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
