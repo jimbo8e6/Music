@@ -12,7 +12,7 @@ import {
   setSessionCookie,
   verifyPassword,
 } from "@/lib/auth";
-import { sendPasswordResetEmail, sendVerificationEmail } from "@/lib/email";
+import { sendNewUserNotification, sendPasswordResetEmail, sendVerificationEmail } from "@/lib/email";
 import { getOrFetchAlbum } from "@/lib/queries";
 import { MAX_RATING, PHYSICAL_FORMATS } from "@/lib/format";
 
@@ -65,11 +65,20 @@ export async function registerUser(
     return { error: "Registration failed. Please try again." };
   }
 
+  // Auto-follow wax_official so the owner can track new sign-ups via follower count
+  const waxOfficial = await db.select().from(users).where(eq(users.username, "wax_official")).get();
+  if (waxOfficial) {
+    await db.insert(follows).values({ followerId: id, followingId: waxOfficial.id }).catch(() => {});
+  }
+
   // Issue verification token and send email (non-blocking — failure doesn't abort registration)
   const verifyToken = generateToken();
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
   await db.insert(emailTokens).values({ userId: id, token: verifyToken, type: "verify", expiresAt });
   sendVerificationEmail(email, verifyToken).catch(console.error);
+
+  // Notify admin of new sign-up
+  sendNewUserNotification(username, email).catch(console.error);
 
   const sessionToken = await createToken({ userId: id, username });
   await setSessionCookie(sessionToken);

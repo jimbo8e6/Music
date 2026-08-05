@@ -47,6 +47,22 @@ export async function sendVerificationEmail(to: string, token: string): Promise<
   if (error) console.error("Failed to send verification email:", error);
 }
 
+export async function sendNewUserNotification(username: string, email: string): Promise<void> {
+  const adminEmail = process.env.ADMIN_EMAIL;
+  if (!adminEmail) return;
+  const { error } = await resend.emails.send({
+    from: FROM,
+    to: adminEmail,
+    subject: `New Wax sign-up: @${username}`,
+    html: `<!DOCTYPE html><html><body style="background:#0f0f11;color:#c8c8d0;font-family:sans-serif;padding:32px">
+      <p style="margin:0;font-size:15px">New account created on Wax:</p>
+      <p style="margin:12px 0 4px;font-size:18px;font-weight:700;color:#f0f0f3">@${username}</p>
+      <p style="margin:0;font-size:13px;color:#6b6b75">${email}</p>
+    </body></html>`,
+  });
+  if (error) console.error("Failed to send new user notification:", error);
+}
+
 export async function sendPasswordResetEmail(to: string, token: string): Promise<void> {
   const url = `${appUrl()}/reset-password/${token}`;
   const { error } = await resend.emails.send({
