@@ -595,6 +595,38 @@ export async function getProfileEntries(
     .limit(limit);
 }
 
+export async function getFollowers(userId: string): Promise<PublicUser[]> {
+  await ready();
+  return db
+    .select({
+      id: schema.users.id,
+      username: schema.users.username,
+      displayName: schema.users.displayName,
+      bio: schema.users.bio,
+      avatarUrl: schema.users.avatarUrl,
+    })
+    .from(follows)
+    .innerJoin(schema.users, eq(follows.followerId, schema.users.id))
+    .where(eq(follows.followingId, userId))
+    .orderBy(desc(follows.createdAt));
+}
+
+export async function getFollowing(userId: string): Promise<PublicUser[]> {
+  await ready();
+  return db
+    .select({
+      id: schema.users.id,
+      username: schema.users.username,
+      displayName: schema.users.displayName,
+      bio: schema.users.bio,
+      avatarUrl: schema.users.avatarUrl,
+    })
+    .from(follows)
+    .innerJoin(schema.users, eq(follows.followingId, schema.users.id))
+    .where(eq(follows.followerId, userId))
+    .orderBy(desc(follows.createdAt));
+}
+
 export async function isFollowing(followerId: string, followingId: string): Promise<boolean> {
   await ready();
   const row = await db

@@ -54,12 +54,12 @@ export default async function ProfilePage({
             <span>
               <span className="text-mist-100 font-medium">{stats.rated}</span> rated
             </span>
-            <span>
+            <Link href={`/profile/${profileUser.username}/followers`} className="hover:text-mist-200 transition-colors">
               <span className="text-mist-100 font-medium">{stats.followers}</span> followers
-            </span>
-            <span>
+            </Link>
+            <Link href={`/profile/${profileUser.username}/following`} className="hover:text-mist-200 transition-colors">
               <span className="text-mist-100 font-medium">{stats.following}</span> following
-            </span>
+            </Link>
           </div>
         </div>
 
