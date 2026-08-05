@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 
 import { Nav } from "@/components/Nav";
 import "./globals.css";
@@ -10,6 +10,11 @@ export const metadata: Metadata = {
   },
   description:
     "A quiet place to log the albums you listen to, rate them out of five and write about them.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({
@@ -43,10 +48,10 @@ export default function RootLayout({
             </a>{" "}
             and{" "}
             <a
-              href="https://spotify.com"
+              href="https://deezer.com"
               className="hover:text-mist-100 underline underline-offset-2"
             >
-              Spotify
+              Deezer
             </a>
             .
           </p>
