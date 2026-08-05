@@ -22,14 +22,6 @@ export function PlayLinks({
 
   const services = [
     {
-      name: "Deezer",
-      href: links.deezer ?? `https://www.deezer.com/search/${term}`,
-      exact: Boolean(links.deezer),
-      icon: <DeezerMark />,
-      hover: "hover:border-[#ef5466]/60 hover:text-[#ef5466]",
-      searchable: true,
-    },
-    {
       name: "Spotify",
       href: links.spotify ?? `https://open.spotify.com/search/${term}`,
       exact: Boolean(links.spotify),
@@ -62,6 +54,14 @@ export function PlayLinks({
       icon: <YouTubeMark />,
       hover: "hover:border-[#ff0033]/60 hover:text-[#ff0033]",
       searchable: false,
+    },
+    {
+      name: "Deezer",
+      href: links.deezer ?? `https://www.deezer.com/search/${term}`,
+      exact: Boolean(links.deezer),
+      icon: <DeezerMark />,
+      hover: "hover:border-[#ef5466]/60 hover:text-[#ef5466]",
+      searchable: true,
     },
   ].filter((service) => service.exact || service.searchable);
 
