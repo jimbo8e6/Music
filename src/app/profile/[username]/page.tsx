@@ -3,12 +3,14 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 
 import { AlbumCard } from "@/components/AlbumCard";
+import { FavouriteAlbums } from "@/components/FavouriteAlbums";
 import { coverArtUrl } from "@/lib/coverart";
 import { followUser, unfollowUser } from "@/lib/actions";
 import {
   getUserByUsername,
   getProfileEntries,
   getProfileCollection,
+  getFavouriteAlbums,
   getProfileStats,
   isFollowing,
 } from "@/lib/queries";
@@ -37,9 +39,10 @@ export default async function ProfilePage({
   const currentUserId = headerStore.get("x-user-id") ?? "";
   const isOwnProfile = currentUserId === profileUser.id;
 
-  const [entries, collectionItems, stats, following] = await Promise.all([
+  const [entries, collectionItems, favouriteAlbums, stats, following] = await Promise.all([
     activeTab === "ratings" ? getProfileEntries(profileUser.id, { limit: 24 }) : Promise.resolve([]),
     activeTab === "collection" ? getProfileCollection(profileUser.id) : Promise.resolve([]),
+    getFavouriteAlbums(profileUser.id),
     getProfileStats(profileUser.id),
     isOwnProfile ? Promise.resolve(false) : isFollowing(currentUserId, profileUser.id),
   ]);
@@ -95,6 +98,8 @@ export default async function ProfilePage({
           </Link>
         )}
       </div>
+
+      <FavouriteAlbums favourites={favouriteAlbums} isOwner={isOwnProfile} />
 
       {/* Tabs */}
       <div className="border-ink-800 flex gap-6 border-b">

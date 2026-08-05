@@ -239,6 +239,21 @@ export function ready(): Promise<void> {
         await db.run(sql`ALTER TABLE users ADD password_hash text`);
       }
 
+      if (!(await tableExists("favourites"))) {
+        await db.run(
+          sql`CREATE TABLE IF NOT EXISTS favourites (
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            album_id TEXT NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+            position INTEGER NOT NULL,
+            created_at INTEGER DEFAULT (unixepoch()) NOT NULL
+          )`,
+        );
+        await db.run(
+          sql`CREATE UNIQUE INDEX IF NOT EXISTS favourites_user_position_idx ON favourites (user_id, position)`,
+        );
+      }
+
       if (!(await tableExists("follows"))) {
         await db.run(
           sql`CREATE TABLE IF NOT EXISTS follows (

@@ -170,6 +170,23 @@ export const collection = sqliteTable("collection", {
     .default(sql`(unixepoch())`),
 }, (t) => [uniqueIndex("collection_user_album_idx").on(t.userId, t.albumId)]);
 
+/** Up to 4 pinned favourite albums shown at the top of a user's profile. */
+export const favourites = sqliteTable("favourites", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  albumId: text("album_id")
+    .notNull()
+    .references(() => albums.id, { onDelete: "cascade" }),
+  position: integer("position").notNull(), // 1–4
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+}, (t) => [
+  uniqueIndex("favourites_user_position_idx").on(t.userId, t.position),
+]);
+
 /** Albums the user wants to hear but hasn't logged yet. */
 export const watchlist = sqliteTable("watchlist", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -190,3 +207,4 @@ export type NewAlbum = typeof albums.$inferInsert;
 export type Entry = typeof entries.$inferSelect;
 export type CollectionEntry = typeof collection.$inferSelect;
 export type Follow = typeof follows.$inferSelect;
+export type Favourite = typeof favourites.$inferSelect;

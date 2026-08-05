@@ -24,7 +24,7 @@ export interface EntryWithAlbum {
   album: Album;
 }
 
-const { albums, entries, watchlist, collection, follows } = schema;
+const { albums, entries, watchlist, collection, follows, favourites } = schema;
 
 /**
  * Returns the cached album, fetching and caching it from MusicBrainz on a miss.
@@ -603,6 +603,21 @@ export async function getProfileEntries(
     .where(eq(entries.userId, userId))
     .orderBy(desc(entries.updatedAt))
     .limit(limit);
+}
+
+export async function getFavouriteAlbums(userId: string): Promise<(Album | null)[]> {
+  await ready();
+  const rows = await db
+    .select({ album: albums, position: favourites.position })
+    .from(favourites)
+    .innerJoin(albums, eq(favourites.albumId, albums.id))
+    .where(eq(favourites.userId, userId));
+
+  const result: (Album | null)[] = [null, null, null, null];
+  for (const { album, position } of rows) {
+    if (position >= 1 && position <= 4) result[position - 1] = album;
+  }
+  return result;
 }
 
 export async function getFollowers(userId: string): Promise<PublicUser[]> {

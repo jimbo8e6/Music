@@ -15,7 +15,7 @@ import {
 import { getOrFetchAlbum } from "@/lib/queries";
 import { MAX_RATING, PHYSICAL_FORMATS } from "@/lib/format";
 
-const { entries, watchlist, collection, users, follows } = schema;
+const { entries, watchlist, collection, users, follows, favourites } = schema;
 
 export interface AuthFormState {
   error?: string;
@@ -112,6 +112,29 @@ export async function unfollowUser(formData: FormData): Promise<void> {
     .delete(follows)
     .where(and(eq(follows.followerId, user.id), eq(follows.followingId, followingId)));
   revalidatePath(`/profile/${username}`);
+}
+
+export async function setFavouriteAlbum(position: number, albumId: string): Promise<void> {
+  if (position < 1 || position > 4) return;
+  const user = await getCurrentUser();
+  await getOrFetchAlbum(albumId);
+  await db
+    .insert(favourites)
+    .values({ userId: user.id, albumId, position })
+    .onConflictDoUpdate({
+      target: [favourites.userId, favourites.position],
+      set: { albumId },
+    });
+  revalidatePath(`/profile/${user.username}`);
+}
+
+export async function removeFavouriteAlbum(position: number): Promise<void> {
+  if (position < 1 || position > 4) return;
+  const user = await getCurrentUser();
+  await db
+    .delete(favourites)
+    .where(and(eq(favourites.userId, user.id), eq(favourites.position, position)));
+  revalidatePath(`/profile/${user.username}`);
 }
 
 function parseRating(raw: FormDataEntryValue | null): number | null {
