@@ -84,6 +84,27 @@ export async function getTopAlbums({ limit = 10 }: { limit?: number } = {}): Pro
   return results.filter((a): a is LastFmAlbum => a !== null);
 }
 
+export interface LastFmSimilarArtist {
+  name: string;
+  mbid: string | null;
+  match: number;
+}
+
+export async function getSimilarArtists(
+  mbid: string,
+  { limit = 5 }: { limit?: number } = {},
+): Promise<LastFmSimilarArtist[]> {
+  const data = await callApi({ method: "artist.getSimilar", mbid, limit: String(limit) });
+  const artists = (
+    data as { similarartists?: { artist?: { name: string; mbid?: string; match?: string }[] } }
+  ).similarartists?.artist ?? [];
+  return artists.map((a) => ({
+    name: a.name,
+    mbid: a.mbid || null,
+    match: parseFloat(a.match ?? "0"),
+  }));
+}
+
 export async function checkLastFmHealth(): Promise<{ ok: boolean; count?: number; error?: string }> {
   try {
     const data = await callApi({ method: "chart.getTopArtists", limit: "4" }, 0);

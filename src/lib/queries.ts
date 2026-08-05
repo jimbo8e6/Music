@@ -14,6 +14,7 @@ import {
   type ExternalLinks,
   type Track,
 } from "@/lib/musicbrainz";
+import { getSimilarArtists } from "@/lib/lastfm";
 import { getDeezerAlbum, isDeezerAlbumId } from "@/lib/deezer";
 import { getSpotifyAlbum, isSpotifyId } from "@/lib/spotify";
 
@@ -414,7 +415,7 @@ export async function getHomeRecommendations({
   const loggedIds = new Set(loggedRows.map(r => r.albumId));
 
   const topArtists = await db
-    .select({ artistMbid: albums.artistMbid })
+    .select({ artistMbid: albums.artistMbid, artistName: albums.artistName })
     .from(entries)
     .innerJoin(albums, eq(entries.albumId, albums.id))
     .where(and(
@@ -429,7 +430,9 @@ export async function getHomeRecommendations({
 
   const recs: HomeRecommendation[] = [];
   const seenMbids = new Set<string>();
+  const topArtistMbids = new Set(topArtists.map(a => a.artistMbid).filter(Boolean) as string[]);
 
+  // Source 1: unlogged studio albums by the user's own top-rated artists.
   for (const { artistMbid } of topArtists) {
     if (!artistMbid || recs.length >= limit) break;
     try {
@@ -447,7 +450,40 @@ export async function getHomeRecommendations({
         }
       }
     } catch {
-      // Skip artists if MB is unavailable
+      // Skip if MB is unavailable
+    }
+  }
+
+  // Source 2: albums by similar artists (via Last.fm), to fill remaining slots.
+  if (recs.length < limit) {
+    for (const { artistMbid } of topArtists) {
+      if (!artistMbid || recs.length >= limit) break;
+      try {
+        const similar = await getSimilarArtists(artistMbid, { limit: 5 });
+        for (const sim of similar) {
+          if (!sim.mbid || recs.length >= limit) continue;
+          if (topArtistMbids.has(sim.mbid)) continue;
+          try {
+            const { releaseGroups } = await getArtistReleaseGroups(sim.mbid);
+            for (const rg of releaseGroups) {
+              if (recs.length >= limit) break;
+              if (
+                rg.primaryType === "Album" &&
+                rg.secondaryTypes.length === 0 &&
+                !loggedIds.has(rg.mbid) &&
+                !seenMbids.has(rg.mbid)
+              ) {
+                recs.push({ ...rg, coverArtUrl: null });
+                seenMbids.add(rg.mbid);
+              }
+            }
+          } catch {
+            // Skip if MB is unavailable for this similar artist
+          }
+        }
+      } catch {
+        // Skip if Last.fm is unavailable
+      }
     }
   }
 
