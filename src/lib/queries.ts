@@ -1,6 +1,6 @@
 import { cache } from "react";
 
-import { and, avg, count, desc, eq, gt, isNotNull, like, sql } from "drizzle-orm";
+import { and, avg, count, desc, eq, isNotNull, like, sql } from "drizzle-orm";
 
 import { db, getCurrentUser, getOptionalCurrentUser, ready, schema } from "@/db";
 import type { Album, Entry } from "@/db/schema";
@@ -393,14 +393,9 @@ export async function isOnWatchlist(albumId: string): Promise<boolean> {
 /**
  * Albums the user probably wants to hear next.
  *
- * Two sources, merged and deduplicated:
- *   1. Albums browsed recently (in the local cache within the last 14 days)
- *      but not yet logged — these are the ones the user looked at and didn't
- *      add yet, so they're clearly on the radar.
- *   2. Albums by the user's highest-rated artists that aren't in the library.
- *      Fetches artist discographies from MusicBrainz if the local cache doesn't
- *      have enough — those responses are cached for 7 days so after the first
- *      hit the page is fast.
+ * Shows albums by the user's highest-rated artists that aren't already in
+ * their library. Fetches artist discographies from MusicBrainz; responses
+ * are cached for 7 days so after the first hit the page is fast.
  */
 export interface HomeRecommendation extends AlbumSearchResult {
   coverArtUrl: string | null;
@@ -418,31 +413,6 @@ export async function getHomeRecommendations({
     .where(eq(entries.userId, user.id));
   const loggedIds = new Set(loggedRows.map(r => r.albumId));
 
-  // 1. Albums browsed in the last 14 days, not yet logged.
-  const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
-  const recentlyBrowsed: HomeRecommendation[] = (await db
-    .select()
-    .from(albums)
-    .where(and(eq(albums.primaryType, "Album"), gt(albums.cachedAt, twoWeeksAgo)))
-    .orderBy(desc(albums.cachedAt))
-    .limit(50))
-    .filter(a => !loggedIds.has(a.id) && (a.secondaryTypes?.length ?? 0) === 0)
-    .map(a => ({
-      mbid: a.id,
-      title: a.title,
-      artistName: a.artistName,
-      artistMbid: a.artistMbid,
-      year: a.year,
-      releaseDate: a.releaseDate,
-      primaryType: a.primaryType,
-      secondaryTypes: a.secondaryTypes ?? [],
-      score: 0,
-      coverArtUrl: a.coverArtUrl ?? null,
-    }));
-
-  if (recentlyBrowsed.length >= limit) return recentlyBrowsed.slice(0, limit);
-
-  // 2. Albums by top-rated artists (avg ≥ 7 = 3.5 stars), fetched from MB.
   const topArtists = await db
     .select({ artistMbid: albums.artistMbid })
     .from(entries)
@@ -457,8 +427,8 @@ export async function getHomeRecommendations({
     .orderBy(desc(sql`avg(${entries.rating})`))
     .limit(3);
 
-  const recs: HomeRecommendation[] = [...recentlyBrowsed];
-  const seenMbids = new Set(recs.map(r => r.mbid));
+  const recs: HomeRecommendation[] = [];
+  const seenMbids = new Set<string>();
 
   for (const { artistMbid } of topArtists) {
     if (!artistMbid || recs.length >= limit) break;
