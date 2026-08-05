@@ -1,4 +1,5 @@
 import { AlbumCard } from "@/components/AlbumCard";
+import { BackButton } from "@/components/BackButton";
 import { EmptyState } from "@/components/EmptyState";
 import { coverArtUrl } from "@/lib/coverart";
 import { getWatchlist } from "@/lib/queries";
@@ -11,6 +12,7 @@ export default async function WatchlistPage() {
 
   return (
     <div className="space-y-6">
+      <BackButton />
       <h1 className="text-xl font-semibold">
         Listen later
         <span className="text-mist-400 ml-2 text-sm font-normal tabular-nums">

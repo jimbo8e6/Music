@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { AlbumCard } from "@/components/AlbumCard";
+import { BackButton } from "@/components/BackButton";
 import { EmptyState } from "@/components/EmptyState";
 import { coverArtUrl } from "@/lib/coverart";
 import { getCollection, getEntries, type LibrarySort } from "@/lib/queries";
@@ -41,6 +42,7 @@ export default async function LibraryPage({
     const items = await getCollection();
     return (
       <div className="space-y-6">
+        <BackButton />
         <div className="flex flex-wrap items-center justify-between gap-4">
           <h1 className="text-xl font-semibold">
             Your library
@@ -89,6 +91,7 @@ export default async function LibraryPage({
 
   return (
     <div className="space-y-6">
+      <BackButton />
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-xl font-semibold">
           Your library

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 
 import { AlbumSleeve } from "@/components/AlbumSleeve";
+import { BackButton } from "@/components/BackButton";
 import { OwnedFormatsButton } from "@/components/OwnedFormatsButton";
 import { PlayLinks } from "@/components/PlayLinks";
 import { Stars } from "@/components/Stars";
@@ -60,6 +61,7 @@ export default async function AlbumPage({
 
   return (
     <article className="space-y-10">
+      <BackButton />
       <div className="grid gap-8 md:grid-cols-[minmax(0,320px)_1fr]">
         <div className="space-y-4">
           <AlbumSleeve

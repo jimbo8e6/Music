@@ -6,6 +6,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { AlbumCard } from "@/components/AlbumCard";
 import { AlbumGridSkeleton } from "@/components/AlbumGridSkeleton";
 import { activeYears } from "@/components/ArtistCard";
+import { BackButton } from "@/components/BackButton";
 import { db, getOptionalCurrentUser, schema } from "@/db";
 import {
   MusicBrainzError,
@@ -68,6 +69,7 @@ async function DeezerArtistPage({ id }: { id: string }) {
 
   return (
     <div className="space-y-8">
+      <BackButton />
       <header className="space-y-2">
         <h1 className="text-3xl leading-tight font-bold">{artist.name}</h1>
       </header>
@@ -188,6 +190,7 @@ async function MbArtistPage({ id }: { id: string }) {
 
   return (
     <div className="space-y-8">
+      <BackButton />
       <header className="space-y-2">
         <h1 className="text-3xl leading-tight font-bold">{artist.name}</h1>
         {artist.disambiguation && (
