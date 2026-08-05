@@ -91,10 +91,14 @@ export interface LastFmSimilarArtist {
 }
 
 export async function getSimilarArtists(
-  mbid: string,
+  { mbid, name }: { mbid?: string; name?: string },
   { limit = 5 }: { limit?: number } = {},
 ): Promise<LastFmSimilarArtist[]> {
-  const data = await callApi({ method: "artist.getSimilar", mbid, limit: String(limit) });
+  if (!mbid && !name) return [];
+  const params: Record<string, string> = { method: "artist.getSimilar", limit: String(limit) };
+  if (mbid) params.mbid = mbid;
+  else params.artist = name!;
+  const data = await callApi(params);
   const artists = (
     data as { similarartists?: { artist?: { name: string; mbid?: string; match?: string }[] } }
   ).similarartists?.artist ?? [];

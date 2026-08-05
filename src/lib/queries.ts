@@ -1,6 +1,6 @@
 import { cache } from "react";
 
-import { and, avg, count, desc, eq, isNotNull, like, sql } from "drizzle-orm";
+import { and, avg, count, desc, eq, isNotNull, like, or, sql } from "drizzle-orm";
 
 import { db, getCurrentUser, getOptionalCurrentUser, ready, schema } from "@/db";
 import type { Album, Entry } from "@/db/schema";
@@ -15,6 +15,7 @@ import {
   type Track,
 } from "@/lib/musicbrainz";
 import { getSimilarArtists } from "@/lib/lastfm";
+import { getDeezerArtistAlbums } from "@/lib/deezer";
 import { getDeezerAlbum, isDeezerAlbumId } from "@/lib/deezer";
 import { getSpotifyAlbum, isSpotifyId } from "@/lib/spotify";
 
@@ -414,52 +415,86 @@ export async function getHomeRecommendations({
     .where(eq(entries.userId, user.id));
   const loggedIds = new Set(loggedRows.map(r => r.albumId));
 
+  // Group by artistName so both MusicBrainz and Deezer albums qualify.
   const topArtists = await db
-    .select({ artistMbid: albums.artistMbid, artistName: albums.artistName })
+    .select({
+      artistName: albums.artistName,
+      artistMbid: albums.artistMbid,
+      artistDeezerId: albums.artistSpotifyId,
+    })
     .from(entries)
     .innerJoin(albums, eq(entries.albumId, albums.id))
     .where(and(
       eq(entries.userId, user.id),
       isNotNull(entries.rating),
-      isNotNull(albums.artistMbid),
+      or(isNotNull(albums.artistMbid), isNotNull(albums.artistSpotifyId)),
     ))
-    .groupBy(albums.artistMbid)
+    .groupBy(albums.artistName)
     .having(sql`avg(${entries.rating}) >= 7`)
     .orderBy(desc(sql`avg(${entries.rating})`))
     .limit(3);
 
   const recs: HomeRecommendation[] = [];
-  const seenMbids = new Set<string>();
+  const seenIds = new Set<string>();
   const topArtistMbids = new Set(topArtists.map(a => a.artistMbid).filter(Boolean) as string[]);
 
   // Source 1: unlogged studio albums by the user's own top-rated artists.
-  for (const { artistMbid } of topArtists) {
-    if (!artistMbid || recs.length >= limit) break;
+  for (const { artistMbid, artistDeezerId, artistName } of topArtists) {
+    if (recs.length >= limit) break;
     try {
-      const { releaseGroups } = await getArtistReleaseGroups(artistMbid);
-      for (const rg of releaseGroups) {
-        if (recs.length >= limit) break;
-        if (
-          rg.primaryType === "Album" &&
-          rg.secondaryTypes.length === 0 &&
-          !loggedIds.has(rg.mbid) &&
-          !seenMbids.has(rg.mbid)
-        ) {
-          recs.push({ ...rg, coverArtUrl: null });
-          seenMbids.add(rg.mbid);
+      if (artistMbid) {
+        const { releaseGroups } = await getArtistReleaseGroups(artistMbid);
+        for (const rg of releaseGroups) {
+          if (recs.length >= limit) break;
+          if (
+            rg.primaryType === "Album" &&
+            rg.secondaryTypes.length === 0 &&
+            !loggedIds.has(rg.mbid) &&
+            !seenIds.has(rg.mbid)
+          ) {
+            recs.push({ ...rg, coverArtUrl: null });
+            seenIds.add(rg.mbid);
+          }
+        }
+      } else if (artistDeezerId && isDeezerAlbumId(artistDeezerId)) {
+        const deezerAlbums = await getDeezerArtistAlbums(artistDeezerId, artistName ?? undefined);
+        for (const a of deezerAlbums) {
+          if (recs.length >= limit) break;
+          if (
+            a.albumType === "album" &&
+            !loggedIds.has(a.deezerId) &&
+            !seenIds.has(a.deezerId)
+          ) {
+            recs.push({
+              mbid: a.deezerId,
+              title: a.title,
+              artistName: a.artistName,
+              artistMbid: null,
+              year: a.year,
+              releaseDate: a.releaseDate,
+              primaryType: "Album",
+              secondaryTypes: [],
+              score: 0,
+              coverArtUrl: a.artworkUrl,
+            });
+            seenIds.add(a.deezerId);
+          }
         }
       }
     } catch {
-      // Skip if MB is unavailable
+      // Skip if API is unavailable
     }
   }
 
   // Source 2: albums by similar artists (via Last.fm), to fill remaining slots.
   if (recs.length < limit) {
-    for (const { artistMbid } of topArtists) {
-      if (!artistMbid || recs.length >= limit) break;
+    for (const { artistMbid, artistName } of topArtists) {
+      if (recs.length >= limit) break;
       try {
-        const similar = await getSimilarArtists(artistMbid, { limit: 5 });
+        const similar = await getSimilarArtists(
+          artistMbid ? { mbid: artistMbid } : { name: artistName ?? undefined },
+          { limit: 5 },
+        );
         for (const sim of similar) {
           if (!sim.mbid || recs.length >= limit) continue;
           if (topArtistMbids.has(sim.mbid)) continue;
@@ -471,10 +506,10 @@ export async function getHomeRecommendations({
                 rg.primaryType === "Album" &&
                 rg.secondaryTypes.length === 0 &&
                 !loggedIds.has(rg.mbid) &&
-                !seenMbids.has(rg.mbid)
+                !seenIds.has(rg.mbid)
               ) {
                 recs.push({ ...rg, coverArtUrl: null });
-                seenMbids.add(rg.mbid);
+                seenIds.add(rg.mbid);
               }
             }
           } catch {

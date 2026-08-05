@@ -4,7 +4,7 @@ import Link from "next/link";
 import { AlbumCard } from "@/components/AlbumCard";
 import { coverArtUrl } from "@/lib/coverart";
 import { getTopAlbums, type LastFmAlbum } from "@/lib/lastfm";
-import { searchSpotifyAlbums } from "@/lib/spotify";
+import { searchDeezerAlbums } from "@/lib/deezer";
 import { getHomeRecommendations, type HomeRecommendation } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -53,9 +53,9 @@ async function resolveAlbum(a: LastFmAlbum): Promise<{
   title: string; artistName: string; href: string; coverUrl: string | null; year: number | null;
 }> {
   try {
-    const results = await searchSpotifyAlbums(`${a.name} ${a.artistName}`, { limit: 1 });
-    const s = results[0];
-    if (s) return { title: s.title, artistName: s.artistName, href: `/album/${s.spotifyId}`, coverUrl: s.artworkUrl, year: s.year };
+    const results = await searchDeezerAlbums(`${a.name} ${a.artistName}`);
+    const d = results[0];
+    if (d) return { title: d.title, artistName: d.artistName, href: `/album/${d.deezerId}`, coverUrl: d.artworkUrl, year: d.year };
   } catch {
     // fall through
   }
