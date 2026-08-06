@@ -218,6 +218,24 @@ export const comments = sqliteTable("comments", {
   index("comments_user_idx").on(t.userId),
 ]);
 
+/** In-app notifications: replies to comments and new comments on entries. */
+export const notifications = sqliteTable("notifications", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // 'reply' | 'comment'
+  actorId: text("actor_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  commentId: integer("comment_id").references(() => comments.id, { onDelete: "cascade" }),
+  entryId: integer("entry_id").references(() => entries.id, { onDelete: "cascade" }),
+  albumId: text("album_id").references(() => albums.id, { onDelete: "cascade" }),
+  read: integer("read", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+}, (t) => [
+  index("notifications_user_idx").on(t.userId),
+  index("notifications_user_read_idx").on(t.userId, t.read),
+]);
+
 /** Albums the user wants to hear but hasn't logged yet. */
 export const watchlist = sqliteTable("watchlist", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -234,6 +252,7 @@ export const watchlist = sqliteTable("watchlist", {
 
 export type Comment = typeof comments.$inferSelect;
 export type EmailToken = typeof emailTokens.$inferSelect;
+export type Notification = typeof notifications.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type Album = typeof albums.$inferSelect;
 export type NewAlbum = typeof albums.$inferInsert;

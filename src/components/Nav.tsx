@@ -1,7 +1,10 @@
 import { headers } from "next/headers";
 import Link from "next/link";
+import { Suspense } from "react";
 
 import { logout } from "@/lib/actions";
+import { getNotifications } from "@/lib/queries";
+import { BellPlaceholder, NotificationBell } from "@/components/NotificationBell";
 import { SearchBox } from "@/components/SearchBox";
 
 const LINKS = [
@@ -12,11 +15,14 @@ const LINKS = [
 
 export async function Nav() {
   let username: string | null = null;
+  let userId: string | null = null;
   try {
     const headerStore = await headers();
     username = headerStore.get("x-username");
+    userId = headerStore.get("x-user-id");
   } catch {
     username = null;
+    userId = null;
   }
 
   return (
@@ -49,8 +55,11 @@ export async function Nav() {
             <SearchBox />
           </div>
 
-          {username ? (
+          {username && userId ? (
             <div className="text-mist-300 ml-auto flex items-center gap-3 text-sm sm:ml-4">
+              <Suspense fallback={<BellPlaceholder />}>
+                <BellLoader userId={userId} />
+              </Suspense>
               <Link
                 href={`/profile/${username}`}
                 className="text-mist-400 hover:text-mist-100 transition-colors"
@@ -98,4 +107,9 @@ export async function Nav() {
       </div>
     </header>
   );
+}
+
+async function BellLoader({ userId }: { userId: string }) {
+  const items = await getNotifications(userId);
+  return <NotificationBell initialItems={items} />;
 }

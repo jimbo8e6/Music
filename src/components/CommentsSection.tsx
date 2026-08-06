@@ -181,7 +181,7 @@ function CommentBubble({
   };
 
   return (
-    <div className="flex gap-2.5">
+    <div id={`comment-${comment.id}`} className="flex gap-2.5">
       {/* Avatar */}
       <Link href={`/profile/${comment.username}`} className="shrink-0">
         <div className="bg-ink-700 flex h-7 w-7 items-center justify-center overflow-hidden rounded-full text-xs font-semibold text-mist-400">

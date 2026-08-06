@@ -777,6 +777,50 @@ export async function getAlbumCommunityReviews(
     .orderBy(desc(entries.updatedAt));
 }
 
+/* -------------------------------------------------------------------------- */
+/* Notifications                                                                */
+/* -------------------------------------------------------------------------- */
+
+export interface NotificationItem {
+  id: number;
+  type: string;
+  read: boolean;
+  createdAt: Date;
+  actorUsername: string;
+  actorDisplayName: string;
+  actorAvatarUrl: string | null;
+  albumId: string;
+  albumTitle: string;
+  commentId: number | null;
+  commentBody: string | null;
+}
+
+export async function getNotifications(userId: string): Promise<NotificationItem[]> {
+  await ready();
+  const { notifications, users, albums, comments } = schema;
+  return db
+    .select({
+      id: notifications.id,
+      type: notifications.type,
+      read: notifications.read,
+      createdAt: notifications.createdAt,
+      actorUsername: users.username,
+      actorDisplayName: users.displayName,
+      actorAvatarUrl: users.avatarUrl,
+      albumId: albums.id,
+      albumTitle: albums.title,
+      commentId: notifications.commentId,
+      commentBody: comments.body,
+    })
+    .from(notifications)
+    .innerJoin(users, eq(notifications.actorId, users.id))
+    .innerJoin(albums, eq(notifications.albumId, albums.id))
+    .leftJoin(comments, eq(notifications.commentId, comments.id))
+    .where(eq(notifications.userId, userId))
+    .orderBy(desc(notifications.createdAt))
+    .limit(30);
+}
+
 export async function searchUsers(query: string): Promise<PublicUser[]> {
   const q = query.trim();
   if (!q) return [];

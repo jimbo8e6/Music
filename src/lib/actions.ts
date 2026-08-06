@@ -16,7 +16,7 @@ import { sendNewUserNotification, sendPasswordResetEmail, sendVerificationEmail 
 import { getOrFetchAlbum } from "@/lib/queries";
 import { MAX_RATING, PHYSICAL_FORMATS } from "@/lib/format";
 
-const { entries, watchlist, collection, users, follows, favourites, emailTokens, comments } = schema;
+const { entries, watchlist, collection, users, follows, favourites, emailTokens, comments, notifications } = schema;
 
 function generateToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
@@ -217,12 +217,60 @@ export async function addComment(
   const trimmed = body.trim();
   if (!trimmed || trimmed.length > 1000) return;
   const user = await getCurrentUser();
-  await db.insert(comments).values({
-    userId: user.id,
-    entryId,
-    body: trimmed,
-    parentId: parentId ?? null,
-  });
+
+  const inserted = await db
+    .insert(comments)
+    .values({ userId: user.id, entryId, body: trimmed, parentId: parentId ?? null })
+    .returning()
+    .get();
+  if (!inserted) return;
+
+  // Look up the entry to get album ID and owner
+  const entry = await db
+    .select({ userId: entries.userId, albumId: entries.albumId })
+    .from(entries)
+    .where(eq(entries.id, entryId))
+    .get();
+  if (!entry) return;
+
+  if (parentId) {
+    // Reply — notify the parent comment's author (skip if replying to yourself)
+    const parent = await db
+      .select({ userId: comments.userId })
+      .from(comments)
+      .where(eq(comments.id, parentId))
+      .get();
+    if (parent && parent.userId !== user.id) {
+      await db.insert(notifications).values({
+        userId: parent.userId,
+        type: "reply",
+        actorId: user.id,
+        commentId: inserted.id,
+        entryId,
+        albumId: entry.albumId,
+      }).catch(() => {});
+    }
+  } else {
+    // Top-level comment — notify entry owner (skip if commenting on your own review)
+    if (entry.userId !== user.id) {
+      await db.insert(notifications).values({
+        userId: entry.userId,
+        type: "comment",
+        actorId: user.id,
+        commentId: inserted.id,
+        entryId,
+        albumId: entry.albumId,
+      }).catch(() => {});
+    }
+  }
+}
+
+export async function markNotificationsRead(): Promise<void> {
+  const user = await getCurrentUser();
+  await db
+    .update(notifications)
+    .set({ read: true })
+    .where(and(eq(notifications.userId, user.id), eq(notifications.read, false)));
 }
 
 export async function deleteComment(commentId: number): Promise<void> {

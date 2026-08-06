@@ -299,6 +299,22 @@ export function ready(): Promise<void> {
         await db.run(sql`CREATE INDEX IF NOT EXISTS follows_follower_idx ON follows (follower_id)`);
         await db.run(sql`CREATE INDEX IF NOT EXISTS follows_following_idx ON follows (following_id)`);
       }
+
+      if (!(await tableExists("notifications"))) {
+        await db.run(sql`CREATE TABLE IF NOT EXISTS notifications (
+          id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          type TEXT NOT NULL,
+          actor_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          comment_id INTEGER REFERENCES comments(id) ON DELETE CASCADE,
+          entry_id INTEGER REFERENCES entries(id) ON DELETE CASCADE,
+          album_id TEXT REFERENCES albums(id) ON DELETE CASCADE,
+          read INTEGER NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch())
+        )`);
+        await db.run(sql`CREATE INDEX IF NOT EXISTS notifications_user_idx ON notifications (user_id)`);
+        await db.run(sql`CREATE INDEX IF NOT EXISTS notifications_user_read_idx ON notifications (user_id, read)`);
+      }
     } catch (error) {
       // Serverless starts several instances at once, so two can race to apply
       // the first migration and the loser fails on "table already exists".
