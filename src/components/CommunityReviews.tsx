@@ -14,7 +14,7 @@ async function ReviewCard({
   review: CommunityReview;
   currentUserId: string | null;
 }) {
-  const comments = await getEntryComments(review.id);
+  const comments = await getEntryComments(review.id, currentUserId);
 
   return (
     <div className="surface space-y-4 p-5">

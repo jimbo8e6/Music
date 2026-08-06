@@ -97,7 +97,9 @@ export function NotificationBell({ initialItems }: { initialItems: NotificationI
                           ? "replied to your comment on"
                           : n.type === "like"
                             ? "liked your review of"
-                            : "commented on your review of"}{" "}
+                            : n.type === "comment_like"
+                              ? "liked your comment on"
+                              : "commented on your review of"}{" "}
                         <span className="font-semibold">{n.albumTitle}</span>
                       </p>
                       {n.commentBody && (

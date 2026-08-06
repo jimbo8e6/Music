@@ -674,6 +674,8 @@ export interface CommentRow {
   username: string;
   displayName: string;
   avatarUrl: string | null;
+  likeCount: number;
+  viewerHasLiked: boolean;
 }
 
 /** Recursive tree node — each comment carries its direct children. */
@@ -681,7 +683,10 @@ export interface CommentNode extends CommentRow {
   children: CommentNode[];
 }
 
-export async function getEntryComments(entryId: number): Promise<CommentNode[]> {
+export async function getEntryComments(
+  entryId: number,
+  currentUserId: string | null = null,
+): Promise<CommentNode[]> {
   await ready();
   const { comments, users } = schema;
   const rows = await db
@@ -694,6 +699,8 @@ export async function getEntryComments(entryId: number): Promise<CommentNode[]> 
       username: users.username,
       displayName: users.displayName,
       avatarUrl: users.avatarUrl,
+      likeCount: sql<number>`(SELECT count(*) FROM comment_likes WHERE comment_id = ${comments.id})`,
+      viewerHasLiked: sql<number>`(SELECT count(*) FROM comment_likes WHERE comment_id = ${comments.id} AND user_id = ${currentUserId ?? ""})`,
     })
     .from(comments)
     .innerJoin(users, eq(comments.userId, users.id))
@@ -702,7 +709,7 @@ export async function getEntryComments(entryId: number): Promise<CommentNode[]> 
 
   // Build a proper tree so replies nest under their exact parent.
   const nodeMap = new Map<number, CommentNode>(
-    rows.map((r) => [r.id, { ...r, children: [] }]),
+    rows.map((r) => [r.id, { ...r, viewerHasLiked: r.viewerHasLiked > 0, children: [] }]),
   );
   const roots: CommentNode[] = [];
 

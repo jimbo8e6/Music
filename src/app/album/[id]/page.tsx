@@ -57,7 +57,7 @@ export default async function AlbumPage({
     getAlbumStats(album.id),
   ]);
 
-  const entryComments = entry ? await getEntryComments(entry.id) : [];
+  const entryComments = entry ? await getEntryComments(entry.id, currentUserId) : [];
 
   // The tracklist needs a second MusicBrainz request, which the rate limiter
   // has to space a second behind the first. It streams in below instead of

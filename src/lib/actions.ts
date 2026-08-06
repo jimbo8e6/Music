@@ -16,7 +16,7 @@ import { sendNewUserNotification, sendPasswordResetEmail, sendVerificationEmail 
 import { getOrFetchAlbum } from "@/lib/queries";
 import { MAX_RATING, PHYSICAL_FORMATS } from "@/lib/format";
 
-const { entries, watchlist, collection, users, follows, favourites, emailTokens, comments, notifications, reviewLikes } = schema;
+const { entries, watchlist, collection, users, follows, favourites, emailTokens, comments, notifications, reviewLikes, commentLikes } = schema;
 
 function generateToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
@@ -306,6 +306,44 @@ export async function toggleReviewLike(entryId: number): Promise<void> {
         entryId,
         albumId: entry.albumId,
       }).catch(() => {});
+    }
+  }
+}
+
+export async function toggleCommentLike(commentId: number): Promise<void> {
+  const user = await getCurrentUser();
+  const existing = await db
+    .select({ id: commentLikes.id })
+    .from(commentLikes)
+    .where(and(eq(commentLikes.userId, user.id), eq(commentLikes.commentId, commentId)))
+    .get();
+  if (existing) {
+    await db.delete(commentLikes).where(eq(commentLikes.id, existing.id));
+  } else {
+    await db.insert(commentLikes).values({ userId: user.id, commentId }).onConflictDoNothing();
+
+    // Notify the comment author (skip self-likes)
+    const comment = await db
+      .select({ userId: comments.userId, entryId: comments.entryId })
+      .from(comments)
+      .where(eq(comments.id, commentId))
+      .get();
+    if (comment && comment.userId !== user.id) {
+      const entry = await db
+        .select({ albumId: entries.albumId })
+        .from(entries)
+        .where(eq(entries.id, comment.entryId))
+        .get();
+      if (entry) {
+        await db.insert(notifications).values({
+          userId: comment.userId,
+          type: "comment_like",
+          actorId: user.id,
+          commentId,
+          entryId: comment.entryId,
+          albumId: entry.albumId,
+        }).catch(() => {});
+      }
     }
   }
 }
