@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { CommentsSection } from "@/components/CommentsSection";
+import { LikeButton } from "@/components/LikeButton";
 import { Stars } from "@/components/Stars";
 import { formatDate, formatRelative } from "@/lib/format";
 import { getAlbumCommunityReviews, getEntryComments } from "@/lib/queries";
@@ -63,6 +64,17 @@ async function ReviewCard({
         </div>
       </div>
 
+      {review.reviewText && (
+        <div className="flex items-center gap-4 border-t border-ink-800 pt-3">
+          <LikeButton
+            entryId={review.id}
+            initialCount={review.likeCount}
+            initialLiked={review.viewerHasLiked}
+            disabled={!currentUserId}
+          />
+        </div>
+      )}
+
       <CommentsSection
         entryId={review.id}
         comments={comments}
@@ -74,14 +86,12 @@ async function ReviewCard({
 
 export async function CommunityReviews({
   albumId,
-  excludeUserId,
   currentUserId,
 }: {
   albumId: string;
-  excludeUserId: string | null;
   currentUserId: string | null;
 }) {
-  const reviews = await getAlbumCommunityReviews(albumId, excludeUserId);
+  const reviews = await getAlbumCommunityReviews(albumId, currentUserId);
   if (reviews.length === 0) return null;
 
   return (

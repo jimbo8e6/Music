@@ -16,7 +16,7 @@ import { sendNewUserNotification, sendPasswordResetEmail, sendVerificationEmail 
 import { getOrFetchAlbum } from "@/lib/queries";
 import { MAX_RATING, PHYSICAL_FORMATS } from "@/lib/format";
 
-const { entries, watchlist, collection, users, follows, favourites, emailTokens, comments, notifications } = schema;
+const { entries, watchlist, collection, users, follows, favourites, emailTokens, comments, notifications, reviewLikes } = schema;
 
 function generateToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
@@ -278,6 +278,20 @@ export async function deleteComment(commentId: number): Promise<void> {
   await db
     .delete(comments)
     .where(and(eq(comments.id, commentId), eq(comments.userId, user.id)));
+}
+
+export async function toggleReviewLike(entryId: number): Promise<void> {
+  const user = await getCurrentUser();
+  const existing = await db
+    .select({ id: reviewLikes.id })
+    .from(reviewLikes)
+    .where(and(eq(reviewLikes.userId, user.id), eq(reviewLikes.entryId, entryId)))
+    .get();
+  if (existing) {
+    await db.delete(reviewLikes).where(eq(reviewLikes.id, existing.id));
+  } else {
+    await db.insert(reviewLikes).values({ userId: user.id, entryId }).onConflictDoNothing();
+  }
 }
 
 export async function updateAvatar(dataUrl: string): Promise<void> {

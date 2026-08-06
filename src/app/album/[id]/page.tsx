@@ -243,7 +243,6 @@ export default async function AlbumPage({
       <Suspense fallback={null}>
         <CommunityReviews
           albumId={album.id}
-          excludeUserId={currentUserId}
           currentUserId={currentUserId}
         />
       </Suspense>

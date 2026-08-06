@@ -24,7 +24,7 @@ export interface EntryWithAlbum {
   album: Album;
 }
 
-const { albums, entries, watchlist, collection, follows, favourites } = schema;
+const { albums, entries, watchlist, collection, follows, favourites, reviewLikes } = schema;
 
 /**
  * Returns the cached album, fetching and caching it from MusicBrainz on a miss.
@@ -764,17 +764,19 @@ export interface CommunityReview {
   username: string;
   displayName: string;
   avatarUrl: string | null;
+  likeCount: number;
+  viewerHasLiked: boolean;
 }
 
 export async function getAlbumCommunityReviews(
   albumId: string,
-  excludeUserId: string | null,
+  currentUserId: string | null,
 ): Promise<CommunityReview[]> {
   await ready();
   const { users } = schema;
   const conditions = [eq(entries.albumId, albumId)];
-  if (excludeUserId) conditions.push(ne(entries.userId, excludeUserId));
-  return db
+  if (currentUserId) conditions.push(ne(entries.userId, currentUserId));
+  const rows = await db
     .select({
       id: entries.id,
       rating: entries.rating,
@@ -788,11 +790,14 @@ export async function getAlbumCommunityReviews(
       username: users.username,
       displayName: users.displayName,
       avatarUrl: users.avatarUrl,
+      likeCount: sql<number>`(SELECT count(*) FROM review_likes WHERE entry_id = ${entries.id})`,
+      viewerHasLiked: sql<number>`(SELECT count(*) FROM review_likes WHERE entry_id = ${entries.id} AND user_id = ${currentUserId ?? ""})`,
     })
     .from(entries)
     .innerJoin(users, eq(entries.userId, users.id))
     .where(and(...conditions))
     .orderBy(desc(entries.updatedAt));
+  return rows.map((r) => ({ ...r, viewerHasLiked: r.viewerHasLiked > 0 }));
 }
 
 /* -------------------------------------------------------------------------- */

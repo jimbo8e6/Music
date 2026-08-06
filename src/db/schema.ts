@@ -236,6 +236,19 @@ export const notifications = sqliteTable("notifications", {
   index("notifications_user_read_idx").on(t.userId, t.read),
 ]);
 
+/** Likes on other users' reviews. */
+export const reviewLikes = sqliteTable("review_likes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  entryId: integer("entry_id").notNull().references(() => entries.id, { onDelete: "cascade" }),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+}, (t) => [
+  uniqueIndex("review_likes_user_entry_idx").on(t.userId, t.entryId),
+  index("review_likes_entry_idx").on(t.entryId),
+]);
+
 /** Albums the user wants to hear but hasn't logged yet. */
 export const watchlist = sqliteTable("watchlist", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -253,6 +266,7 @@ export const watchlist = sqliteTable("watchlist", {
 export type Comment = typeof comments.$inferSelect;
 export type EmailToken = typeof emailTokens.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
+export type ReviewLike = typeof reviewLikes.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type Album = typeof albums.$inferSelect;
 export type NewAlbum = typeof albums.$inferInsert;
