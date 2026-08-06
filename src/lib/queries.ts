@@ -548,6 +548,7 @@ export interface PublicUser {
   displayName: string;
   bio: string | null;
   avatarUrl: string | null;
+  emailVerified: boolean;
 }
 
 export async function getUserByUsername(username: string): Promise<PublicUser | null> {
@@ -559,6 +560,7 @@ export async function getUserByUsername(username: string): Promise<PublicUser | 
       displayName: schema.users.displayName,
       bio: schema.users.bio,
       avatarUrl: schema.users.avatarUrl,
+      emailVerified: schema.users.emailVerified,
     })
     .from(schema.users)
     .where(eq(schema.users.username, username))
@@ -632,6 +634,7 @@ export async function getFollowers(userId: string): Promise<PublicUser[]> {
       displayName: schema.users.displayName,
       bio: schema.users.bio,
       avatarUrl: schema.users.avatarUrl,
+      emailVerified: schema.users.emailVerified,
     })
     .from(follows)
     .innerJoin(schema.users, eq(follows.followerId, schema.users.id))
@@ -648,6 +651,7 @@ export async function getFollowing(userId: string): Promise<PublicUser[]> {
       displayName: schema.users.displayName,
       bio: schema.users.bio,
       avatarUrl: schema.users.avatarUrl,
+      emailVerified: schema.users.emailVerified,
     })
     .from(follows)
     .innerJoin(schema.users, eq(follows.followingId, schema.users.id))
@@ -861,6 +865,7 @@ export async function searchUsers(query: string): Promise<PublicUser[]> {
       displayName: schema.users.displayName,
       bio: schema.users.bio,
       avatarUrl: schema.users.avatarUrl,
+      emailVerified: schema.users.emailVerified,
     })
     .from(schema.users)
     .where(like(schema.users.username, `%${q}%`))

@@ -6,7 +6,7 @@ import { AlbumCard } from "@/components/AlbumCard";
 import { AvatarDisplay } from "@/components/AvatarEditor";
 import { FavouriteAlbums } from "@/components/FavouriteAlbums";
 import { coverArtUrl } from "@/lib/coverart";
-import { followUser, unfollowUser } from "@/lib/actions";
+import { followUser, unfollowUser, resendVerificationEmail } from "@/lib/actions";
 import {
   getUserByUsername,
   getProfileEntries,
@@ -28,9 +28,9 @@ export default async function ProfilePage({
   searchParams,
 }: {
   params: Promise<{ username: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; resent?: string }>;
 }) {
-  const [{ username }, { tab }] = await Promise.all([params, searchParams]);
+  const [{ username }, { tab, resent }] = await Promise.all([params, searchParams]);
   const activeTab = tab === "collection" ? "collection" : "ratings";
 
   const profileUser = await getUserByUsername(username);
@@ -60,7 +60,20 @@ export default async function ProfilePage({
             />
           </div>
           <h1 className="text-xl font-semibold">{profileUser.displayName}</h1>
-          <p className="text-mist-400 text-sm">@{profileUser.username}</p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <p className="text-mist-400 text-sm">@{profileUser.username}</p>
+            {isOwnProfile && !profileUser.emailVerified && (
+              resent === "1" ? (
+                <span className="text-accent-400 text-xs">Verification email sent ✓</span>
+              ) : (
+                <form action={resendVerificationEmail}>
+                  <button type="submit" className="text-mist-500 hover:text-accent-400 text-xs underline underline-offset-2 transition-colors">
+                    Resend verification email
+                  </button>
+                </form>
+              )
+            )}
+          </div>
           {profileUser.bio && (
             <p className="text-mist-300 mt-2 max-w-prose text-sm">{profileUser.bio}</p>
           )}

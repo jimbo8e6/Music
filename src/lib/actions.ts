@@ -265,6 +265,20 @@ export async function addComment(
   }
 }
 
+export async function resendVerificationEmail(): Promise<void> {
+  const user = await getCurrentUser();
+  if (user.emailVerified || !user.email) return;
+
+  await db.delete(emailTokens).where(
+    and(eq(emailTokens.userId, user.id), eq(emailTokens.type, "verify")),
+  );
+  const token = generateToken();
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  await db.insert(emailTokens).values({ userId: user.id, token, type: "verify", expiresAt });
+  sendVerificationEmail(user.email, token).catch(console.error);
+  redirect(`/profile/${user.username}?resent=1`);
+}
+
 export async function markNotificationsRead(): Promise<void> {
   const user = await getCurrentUser();
   await db
