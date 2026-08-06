@@ -18,10 +18,10 @@ import {
 } from "@/lib/musicbrainz";
 import {
   DeezerError,
+  getDeezerAlbum,
   getDeezerArtist,
   getDeezerArtistAlbums,
   isDeezerAlbumId,
-  searchDeezerArtists,
   type DeezerAlbumResult,
   type DeezerArtistResult,
 } from "@/lib/deezer";
@@ -134,16 +134,24 @@ async function DeezerDiscography({ artistId, artistName }: { artistId: string; a
     sections.set(section, bucket);
   }
 
-  // If there are no studio albums, search for similarly-named artists that
-  // might be the same act under a different Deezer profile (e.g. Suede vs
-  // The London Suede due to a trademark dispute).
+  // If there are no studio albums, check whether the releases on this profile
+  // are actually attributed to a different Deezer artist (e.g. Suede (6365)
+  // carries a few singles whose canonical artist is The London Suede (1203293)
+  // due to a North American trademark dispute). Fetching the album detail
+  // reveals the true artist ID, which we surface as a navigation hint.
   let relatedArtists: DeezerArtistResult[] = [];
   if (!sections.has("Albums")) {
-    try {
-      const results = await searchDeezerArtists(artistName);
-      relatedArtists = results.filter((a) => a.deezerId !== artistId).slice(0, 3);
-    } catch {
-      // non-fatal — just don't show the hint
+    const firstRelease = DEEZER_SECTION_ORDER.flatMap((s) => sections.get(s) ?? []).at(0);
+    if (firstRelease) {
+      try {
+        const detail = await getDeezerAlbum(firstRelease.deezerId);
+        if (detail.artistDeezerId && detail.artistDeezerId !== artistId) {
+          const canonical = await getDeezerArtist(detail.artistDeezerId);
+          relatedArtists = [canonical];
+        }
+      } catch {
+        // non-fatal — just don't show the hint
+      }
     }
   }
 
