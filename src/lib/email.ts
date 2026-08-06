@@ -5,9 +5,12 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM = process.env.EMAIL_FROM ?? "Wax <noreply@wax.app>";
 
 function appUrl(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return "http://localhost:3000";
+  const raw =
+    process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/^["']|["']$/g, "").replace(/\/+$/, "") ??
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+
+  // If the value already has a scheme, use it as-is. Otherwise prepend https.
+  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
 }
 
 function emailHtml(heading: string, body: string, cta: { href: string; label: string }): string {
