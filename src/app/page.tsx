@@ -23,11 +23,29 @@ export default function HomePage() {
   );
 }
 
+function dayOfYear(): number {
+  const now = new Date();
+  return Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) / 86_400_000);
+}
+
+function seededShuffle<T>(arr: T[], seed: number): T[] {
+  const out = [...arr];
+  let s = seed | 0;
+  for (let i = out.length - 1; i > 0; i--) {
+    // xorshift-based mix — deterministic and uniform enough for display purposes
+    s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+    const j = Math.abs(s) % (i + 1);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
 async function PopularAlbumsSection() {
-  const lastfmAlbums = await getTopAlbums({ limit: 12 });
+  const lastfmAlbums = await getTopAlbums({ limit: 20 });
   if (!lastfmAlbums.length) return null;
 
-  const albums = await Promise.all(lastfmAlbums.map(resolveAlbum));
+  const daily = seededShuffle(lastfmAlbums, dayOfYear()).slice(0, 12);
+  const albums = await Promise.all(daily.map(resolveAlbum));
 
   return (
     <section className="space-y-4">
