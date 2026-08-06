@@ -40,8 +40,13 @@ export default async function FollowersPage({
                 href={`/profile/${user.username}`}
                 className="hover:bg-ink-900 flex items-center gap-3 rounded-lg px-2 py-3 transition-colors"
               >
-                <div className="bg-accent-500/15 text-accent-400 grid h-10 w-10 shrink-0 place-items-center rounded-full text-sm font-semibold">
-                  {user.username[0].toUpperCase()}
+                <div className="bg-ink-700 grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full text-sm font-semibold text-mist-400">
+                  {user.avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    user.username[0].toUpperCase()
+                  )}
                 </div>
                 <div>
                   <p className="text-mist-100 text-sm font-medium">{user.displayName}</p>
