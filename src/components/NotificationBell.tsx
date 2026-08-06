@@ -95,7 +95,9 @@ export function NotificationBell({ initialItems }: { initialItems: NotificationI
                         <span className="font-semibold">@{n.actorUsername}</span>{" "}
                         {n.type === "reply"
                           ? "replied to your comment on"
-                          : "commented on your review of"}{" "}
+                          : n.type === "like"
+                            ? "liked your review of"
+                            : "commented on your review of"}{" "}
                         <span className="font-semibold">{n.albumTitle}</span>
                       </p>
                       {n.commentBody && (

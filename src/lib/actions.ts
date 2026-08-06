@@ -291,6 +291,22 @@ export async function toggleReviewLike(entryId: number): Promise<void> {
     await db.delete(reviewLikes).where(eq(reviewLikes.id, existing.id));
   } else {
     await db.insert(reviewLikes).values({ userId: user.id, entryId }).onConflictDoNothing();
+
+    // Notify the review author (skip if liking your own review)
+    const entry = await db
+      .select({ userId: entries.userId, albumId: entries.albumId })
+      .from(entries)
+      .where(eq(entries.id, entryId))
+      .get();
+    if (entry && entry.userId !== user.id) {
+      await db.insert(notifications).values({
+        userId: entry.userId,
+        type: "like",
+        actorId: user.id,
+        entryId,
+        albumId: entry.albumId,
+      }).catch(() => {});
+    }
   }
 }
 
