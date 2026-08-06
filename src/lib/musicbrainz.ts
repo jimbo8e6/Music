@@ -876,7 +876,7 @@ const lookupArtistWithReleases = cache(
   async (mbid: string): Promise<{ artist: ArtistDetail; releaseGroups: MBReleaseGroup[] | null }> => {
     const artist = await mbFetch<MBArtist & { "release-groups"?: MBReleaseGroup[] }>(
       `/artist/${mbid}`,
-      { inc: "genres+release-groups" },
+      { inc: "genres+release-groups+artist-credits" },
       { cacheMs: CACHE_MS.lookup },
     );
 
