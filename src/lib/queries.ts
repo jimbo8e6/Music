@@ -696,11 +696,25 @@ export async function getEntryComments(entryId: number): Promise<ThreadedComment
     .where(eq(comments.entryId, entryId))
     .orderBy(comments.createdAt);
 
+  // Walk the parent chain to find the root top-level comment id.
+  // Handles replies-to-replies without a depth limit in the schema.
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  function rootId(id: number): number {
+    const seen = new Set<number>();
+    let cur = byId.get(id);
+    while (cur && cur.parentId !== null) {
+      if (seen.has(cur.id)) break;
+      seen.add(cur.id);
+      cur = byId.get(cur.parentId);
+    }
+    return cur?.id ?? id;
+  }
+
   const topLevel = rows.filter((r) => r.parentId === null);
-  const replies = rows.filter((r) => r.parentId !== null);
+  const allReplies = rows.filter((r) => r.parentId !== null);
   return topLevel.map((c) => ({
     ...c,
-    replies: replies.filter((r) => r.parentId === c.id),
+    replies: allReplies.filter((r) => rootId(r.id) === c.id),
   }));
 }
 

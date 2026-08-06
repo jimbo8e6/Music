@@ -100,14 +100,28 @@ function Thread({
   onMutation: () => void;
 }) {
   const [showReplies, setShowReplies] = useState(false);
-  const [showReplyForm, setShowReplyForm] = useState(false);
+  // Tracks which comment is being replied to: its id (used as parentId) + username for the placeholder.
+  const [replyTarget, setReplyTarget] = useState<{ parentId: number; username: string } | null>(null);
+
+  const toggleReply = (parentId: number, username: string) => {
+    if (replyTarget?.parentId === parentId) {
+      setReplyTarget(null);
+    } else {
+      setReplyTarget({ parentId, username });
+      setShowReplies(true);
+    }
+  };
 
   const handleReplySubmit = async (body: string) => {
-    await addComment(entryId, body, comment.id);
+    if (!replyTarget) return;
+    await addComment(entryId, body, replyTarget.parentId);
     onMutation();
-    setShowReplyForm(false);
+    setReplyTarget(null);
     setShowReplies(true);
   };
+
+  const hasReplies = comment.replies.length > 0;
+  const showInner = showReplies || replyTarget !== null;
 
   return (
     <div className="space-y-2">
@@ -115,43 +129,42 @@ function Thread({
         comment={comment}
         currentUserId={currentUserId}
         onDelete={onMutation}
-        onReply={currentUserId ? () => setShowReplyForm((v) => !v) : undefined}
+        onReply={currentUserId ? () => toggleReply(comment.id, comment.username) : undefined}
       />
 
-      {/* Reply form */}
-      {showReplyForm && (
+      {(hasReplies || replyTarget !== null) && (
         <div className="ml-8">
-          <CommentForm
-            onSubmit={handleReplySubmit}
-            onCancel={() => setShowReplyForm(false)}
-            placeholder={`Reply to @${comment.username}…`}
-            compact
-          />
-        </div>
-      )}
+          {hasReplies && (
+            <button
+              onClick={() => setShowReplies((v) => !v)}
+              className="text-mist-400 hover:text-mist-200 mb-2 text-xs transition-colors"
+            >
+              {showReplies
+                ? "▲ Hide replies"
+                : `▼ ${comment.replies.length} ${comment.replies.length === 1 ? "reply" : "replies"}`}
+            </button>
+          )}
 
-      {/* Reply chain */}
-      {comment.replies.length > 0 && (
-        <div className="ml-8">
-          <button
-            onClick={() => setShowReplies((v) => !v)}
-            className="text-mist-400 hover:text-mist-200 mb-2 text-xs transition-colors"
-          >
-            {showReplies
-              ? "▲ Hide replies"
-              : `▼ ${comment.replies.length} ${comment.replies.length === 1 ? "reply" : "replies"}`}
-          </button>
-
-          {showReplies && (
+          {showInner && (
             <div className="border-ink-700 space-y-2 border-l pl-3">
-              {comment.replies.map((r) => (
+              {showReplies && comment.replies.map((r) => (
                 <CommentBubble
                   key={r.id}
                   comment={r}
                   currentUserId={currentUserId}
                   onDelete={onMutation}
+                  onReply={currentUserId ? () => toggleReply(r.id, r.username) : undefined}
                 />
               ))}
+
+              {replyTarget !== null && (
+                <CommentForm
+                  onSubmit={handleReplySubmit}
+                  onCancel={() => setReplyTarget(null)}
+                  placeholder={`Reply to @${replyTarget.username}…`}
+                  compact
+                />
+              )}
             </div>
           )}
         </div>
