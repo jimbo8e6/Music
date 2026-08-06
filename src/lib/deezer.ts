@@ -279,6 +279,7 @@ export async function getDeezerArtistAlbums(
   const all: DeezerAlbumResult[] = [];
   const seen = new Set<string>();
   let index = 0;
+  let grandTotal = Infinity;
 
   for (;;) {
     const params: Record<string, string> = { limit: "25" };
@@ -296,6 +297,11 @@ export async function getDeezerArtistAlbums(
       throw err;
     }
 
+    // Use the total from the first response as the authoritative page count.
+    // Deezer sometimes omits `next` even when more pages exist, so checking
+    // against total is more reliable than relying on the next field alone.
+    if (grandTotal === Infinity) grandTotal = page.total ?? Infinity;
+
     for (const album of page.data ?? []) {
       const id = String(album.id);
       if (!seen.has(id)) {
@@ -304,7 +310,7 @@ export async function getDeezerArtistAlbums(
       }
     }
 
-    if (!page.next || !page.data?.length || all.length >= 300) break;
+    if (!page.data?.length || all.length >= grandTotal || all.length >= 300) break;
     index += page.data.length;
   }
 
