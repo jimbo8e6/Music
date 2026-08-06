@@ -5,14 +5,17 @@ import { Suspense } from "react";
 import { AlbumSleeve } from "@/components/AlbumSleeve";
 import { BackButton } from "@/components/BackButton";
 import { CommentsSection } from "@/components/CommentsSection";
+import { CommunityReviews } from "@/components/CommunityReviews";
 import { OwnedFormatsButton } from "@/components/OwnedFormatsButton";
 import { PlayLinks } from "@/components/PlayLinks";
+import { RatingGraph } from "@/components/RatingGraph";
 import { Stars } from "@/components/Stars";
 import { deleteEntry, toggleWatchlist } from "@/lib/actions";
 import { backCoverUrl, coverArtUrl } from "@/lib/coverart";
 import { formatDate, formatRelative } from "@/lib/format";
 import { loadAlbumOrNotFound } from "@/lib/loadAlbum";
 import {
+  getAlbumStats,
   getEntryComments,
   getEntryForAlbum,
   getExternalLinks,
@@ -47,10 +50,11 @@ export default async function AlbumPage({
   const currentUserId = headerStore.get("x-user-id") ?? null;
   const isLoggedIn = Boolean(currentUserId);
 
-  const [entry, onWatchlist, ownedFormats] = await Promise.all([
+  const [entry, onWatchlist, ownedFormats, albumStats] = await Promise.all([
     getEntryForAlbum(album.id),
     isOnWatchlist(album.id),
     getOwnedFormats(album.id),
+    getAlbumStats(album.id),
   ]);
 
   const entryComments = entry ? await getEntryComments(entry.id) : [];
@@ -225,6 +229,24 @@ export default async function AlbumPage({
           )}
         </div>
       </div>
+
+      {/* Community stats + reviews below the main grid */}
+      {albumStats.totalRatings > 0 && (
+        <section className="border-ink-800 space-y-4 border-t pt-6">
+          <h2 className="text-mist-400 text-xs font-semibold uppercase tracking-wider">
+            Community ratings
+          </h2>
+          <RatingGraph stats={albumStats} />
+        </section>
+      )}
+
+      <Suspense fallback={null}>
+        <CommunityReviews
+          albumId={album.id}
+          excludeUserId={currentUserId}
+          currentUserId={currentUserId}
+        />
+      </Suspense>
     </article>
   );
 }

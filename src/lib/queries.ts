@@ -1,6 +1,6 @@
 import { cache } from "react";
 
-import { and, avg, count, desc, eq, isNotNull, like, or, sql } from "drizzle-orm";
+import { and, avg, count, desc, eq, isNotNull, like, ne, or, sql } from "drizzle-orm";
 
 import { db, getCurrentUser, getOptionalCurrentUser, ready, schema } from "@/db";
 import type { Album, Entry } from "@/db/schema";
@@ -702,6 +702,79 @@ export async function getEntryComments(entryId: number): Promise<ThreadedComment
     ...c,
     replies: replies.filter((r) => r.parentId === c.id),
   }));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Album community stats                                                       */
+/* -------------------------------------------------------------------------- */
+
+export interface AlbumStats {
+  totalRatings: number;
+  average: number | null;
+  distribution: { rating: number; count: number }[];
+}
+
+export async function getAlbumStats(albumId: string): Promise<AlbumStats> {
+  await ready();
+  const rows = await db
+    .select({ rating: entries.rating, cnt: count() })
+    .from(entries)
+    .where(and(eq(entries.albumId, albumId), isNotNull(entries.rating)))
+    .groupBy(entries.rating);
+
+  const totalRatings = rows.reduce((n, r) => n + r.cnt, 0);
+  const totalScore = rows.reduce((n, r) => n + (r.rating ?? 0) * r.cnt, 0);
+  const average = totalRatings > 0 ? totalScore / totalRatings : null;
+  const distribution = Array.from({ length: 10 }, (_, i) => ({
+    rating: i + 1,
+    count: rows.find((r) => r.rating === i + 1)?.cnt ?? 0,
+  }));
+
+  return { totalRatings, average, distribution };
+}
+
+export interface CommunityReview {
+  id: number;
+  rating: number | null;
+  reviewTitle: string | null;
+  reviewText: string | null;
+  isFavorite: boolean;
+  listenedOn: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  userId: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+export async function getAlbumCommunityReviews(
+  albumId: string,
+  excludeUserId: string | null,
+): Promise<CommunityReview[]> {
+  await ready();
+  const { users } = schema;
+  const conditions = [eq(entries.albumId, albumId)];
+  if (excludeUserId) conditions.push(ne(entries.userId, excludeUserId));
+  return db
+    .select({
+      id: entries.id,
+      rating: entries.rating,
+      reviewTitle: entries.reviewTitle,
+      reviewText: entries.reviewText,
+      isFavorite: entries.isFavorite,
+      listenedOn: entries.listenedOn,
+      createdAt: entries.createdAt,
+      updatedAt: entries.updatedAt,
+      userId: users.id,
+      username: users.username,
+      displayName: users.displayName,
+      avatarUrl: users.avatarUrl,
+    })
+    .from(entries)
+    .innerJoin(users, eq(entries.userId, users.id))
+    .where(and(...conditions))
+    .orderBy(desc(entries.updatedAt));
 }
 
 export async function searchUsers(query: string): Promise<PublicUser[]> {
