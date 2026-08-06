@@ -212,7 +212,9 @@ export async function searchDeezerAlbums(
     "/search/album",
     { q: query.trim(), limit: String(limit) },
   );
-  return (data.data ?? []).map((a) => toAlbumResult(a));
+  return (data.data ?? [])
+    .map((a) => toAlbumResult(a))
+    .filter((a) => a.albumType !== "single");
 }
 
 /* -------------------------------------------------------------------------- */
