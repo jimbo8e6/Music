@@ -60,6 +60,11 @@ export async function Nav() {
 
           {username && userId ? (
             <div className="text-mist-300 ml-auto flex items-center gap-3 text-sm sm:ml-4">
+              {/* Bell: always visible, left of username on desktop */}
+              <Suspense fallback={<BellPlaceholder />}>
+                <BellLoader userId={userId} />
+              </Suspense>
+
               {/* Desktop: username + sign out inline */}
               <Link
                 href={`/profile/${username}`}
@@ -72,11 +77,6 @@ export async function Nav() {
                   Sign out
                 </button>
               </form>
-
-              {/* Bell: always visible */}
-              <Suspense fallback={<BellPlaceholder />}>
-                <BellLoader userId={userId} />
-              </Suspense>
 
               {/* Hamburger: mobile only — holds nav links + @username + sign out */}
               <HamburgerMenu username={username} />
