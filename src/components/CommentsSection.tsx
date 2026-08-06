@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { addComment, deleteComment } from "@/lib/actions";
-import type { ThreadedComment, CommentRow } from "@/lib/queries";
+import type { CommentNode, CommentRow } from "@/lib/queries";
+
+const AUTO_COLLAPSE_DEPTH = 3;
 
 function timeAgo(date: Date): string {
   const s = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
@@ -18,13 +20,17 @@ function timeAgo(date: Date): string {
   return `${d}d ago`;
 }
 
+function countDescendants(node: CommentNode): number {
+  return node.children.reduce((n, c) => n + 1 + countDescendants(c), 0);
+}
+
 export function CommentsSection({
   entryId,
   comments,
   currentUserId,
 }: {
   entryId: number;
-  comments: ThreadedComment[];
+  comments: CommentNode[];
   currentUserId: string | null;
 }) {
   const router = useRouter();
@@ -35,7 +41,7 @@ export function CommentsSection({
     setShowForm(false);
   };
 
-  const total = comments.reduce((n, c) => n + 1 + c.replies.length, 0);
+  const total = comments.reduce((n, c) => n + 1 + countDescendants(c), 0);
 
   return (
     <div className="border-ink-800 space-y-4 border-t pt-4">
@@ -56,12 +62,13 @@ export function CommentsSection({
       {comments.length > 0 && (
         <div className="space-y-3">
           {comments.map((c) => (
-            <Thread
+            <CommentThread
               key={c.id}
-              comment={c}
+              node={c}
               entryId={entryId}
               currentUserId={currentUserId}
               onMutation={() => router.refresh()}
+              depth={0}
             />
           ))}
         </div>
@@ -88,85 +95,95 @@ export function CommentsSection({
   );
 }
 
-function Thread({
-  comment,
+function CommentThread({
+  node,
   entryId,
   currentUserId,
   onMutation,
+  depth,
 }: {
-  comment: ThreadedComment;
+  node: CommentNode;
   entryId: number;
   currentUserId: string | null;
   onMutation: () => void;
+  depth: number;
 }) {
-  const [showReplies, setShowReplies] = useState(false);
-  // Tracks which comment is being replied to: its id (used as parentId) + username for the placeholder.
-  const [replyTarget, setReplyTarget] = useState<{ parentId: number; username: string } | null>(null);
+  const startCollapsed = depth >= AUTO_COLLAPSE_DEPTH;
+  const [collapsed, setCollapsed] = useState(startCollapsed);
+  const [replyingTo, setReplyingTo] = useState<{ parentId: number; username: string } | null>(null);
 
-  const toggleReply = (parentId: number, username: string) => {
-    if (replyTarget?.parentId === parentId) {
-      setReplyTarget(null);
+  const hasChildren = node.children.length > 0;
+  const showInner = !collapsed && (hasChildren || replyingTo !== null);
+  const descendantCount = countDescendants(node);
+
+  const handleReply = (parentId: number, username: string) => {
+    if (replyingTo?.parentId === parentId) {
+      setReplyingTo(null);
     } else {
-      setReplyTarget({ parentId, username });
-      setShowReplies(true);
+      setReplyingTo({ parentId, username });
+      setCollapsed(false);
     }
   };
 
   const handleReplySubmit = async (body: string) => {
-    if (!replyTarget) return;
-    await addComment(entryId, body, replyTarget.parentId);
+    if (!replyingTo) return;
+    await addComment(entryId, body, replyingTo.parentId);
     onMutation();
-    setReplyTarget(null);
-    setShowReplies(true);
+    setReplyingTo(null);
   };
 
-  const hasReplies = comment.replies.length > 0;
-  const showInner = showReplies || replyTarget !== null;
-
   return (
-    <div className="space-y-2">
+    <div id={`comment-${node.id}`} className="space-y-1.5">
       <CommentBubble
-        comment={comment}
+        comment={node}
         currentUserId={currentUserId}
         onDelete={onMutation}
-        onReply={currentUserId ? () => toggleReply(comment.id, comment.username) : undefined}
+        onReply={currentUserId ? () => handleReply(node.id, node.username) : undefined}
+        isReplying={replyingTo?.parentId === node.id}
       />
 
-      {(hasReplies || replyTarget !== null) && (
-        <div className="ml-8">
-          {hasReplies && (
-            <button
-              onClick={() => setShowReplies((v) => !v)}
-              className="text-mist-400 hover:text-mist-200 mb-2 text-xs transition-colors"
-            >
-              {showReplies
-                ? "▲ Hide replies"
-                : `▼ ${comment.replies.length} ${comment.replies.length === 1 ? "reply" : "replies"}`}
-            </button>
-          )}
+      {collapsed && descendantCount > 0 && (
+        <button
+          onClick={() => setCollapsed(false)}
+          className="text-mist-500 hover:text-accent-400 ml-9 text-xs transition-colors"
+        >
+          ▶ {descendantCount} {descendantCount === 1 ? "reply" : "replies"}
+        </button>
+      )}
 
-          {showInner && (
-            <div className="border-ink-700 space-y-2 border-l pl-3">
-              {showReplies && comment.replies.map((r) => (
-                <CommentBubble
-                  key={r.id}
-                  comment={r}
-                  currentUserId={currentUserId}
-                  onDelete={onMutation}
-                  onReply={currentUserId ? () => toggleReply(r.id, r.username) : undefined}
-                />
-              ))}
+      {showInner && (
+        <div className="ml-3.5 flex gap-2">
+          {/* Clickable collapse line */}
+          <button
+            onClick={() => setCollapsed(true)}
+            className="group relative flex w-4 shrink-0 justify-center py-1"
+            aria-label="Collapse thread"
+            title="Collapse thread"
+          >
+            <span className="bg-ink-700 group-hover:bg-accent-500 absolute inset-y-0 left-1/2 w-px -translate-x-1/2 transition-colors" />
+          </button>
 
-              {replyTarget !== null && (
-                <CommentForm
-                  onSubmit={handleReplySubmit}
-                  onCancel={() => setReplyTarget(null)}
-                  placeholder={`Reply to @${replyTarget.username}…`}
-                  compact
-                />
-              )}
-            </div>
-          )}
+          <div className="min-w-0 flex-1 space-y-2">
+            {node.children.map((child) => (
+              <CommentThread
+                key={child.id}
+                node={child}
+                entryId={entryId}
+                currentUserId={currentUserId}
+                onMutation={onMutation}
+                depth={depth + 1}
+              />
+            ))}
+
+            {replyingTo !== null && (
+              <CommentForm
+                onSubmit={handleReplySubmit}
+                onCancel={() => setReplyingTo(null)}
+                placeholder={`Reply to @${replyingTo.username}…`}
+                compact
+              />
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -178,11 +195,13 @@ function CommentBubble({
   currentUserId,
   onDelete,
   onReply,
+  isReplying = false,
 }: {
   comment: CommentRow;
   currentUserId: string | null;
   onDelete: () => void;
   onReply?: () => void;
+  isReplying?: boolean;
 }) {
   const [deleting, startDelete] = useTransition();
 
@@ -194,7 +213,7 @@ function CommentBubble({
   };
 
   return (
-    <div id={`comment-${comment.id}`} className="flex gap-2.5">
+    <div className="flex gap-2.5">
       {/* Avatar */}
       <Link href={`/profile/${comment.username}`} className="shrink-0">
         <div className="bg-ink-700 flex h-7 w-7 items-center justify-center overflow-hidden rounded-full text-xs font-semibold text-mist-400">
@@ -222,7 +241,7 @@ function CommentBubble({
           {onReply && (
             <button
               onClick={onReply}
-              className="text-mist-500 hover:text-mist-200 text-xs transition-colors"
+              className={`text-xs transition-colors ${isReplying ? "text-accent-400" : "text-mist-500 hover:text-mist-200"}`}
             >
               Reply
             </button>
