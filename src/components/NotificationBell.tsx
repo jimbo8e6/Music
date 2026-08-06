@@ -61,7 +61,7 @@ export function NotificationBell({ initialItems }: { initialItems: NotificationI
       </button>
 
       {open && (
-        <div className="bg-ink-900 border-ink-700 absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-lg border shadow-xl">
+        <div className="bg-ink-900 border-ink-700 absolute right-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-1rem)] overflow-hidden rounded-lg border shadow-xl">
           <div className="border-ink-800 border-b px-4 py-2.5">
             <h3 className="text-mist-300 text-xs font-semibold uppercase tracking-wider">
               Notifications

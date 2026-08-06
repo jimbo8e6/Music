@@ -57,9 +57,6 @@ export async function Nav() {
 
           {username && userId ? (
             <div className="text-mist-300 ml-auto flex items-center gap-3 text-sm sm:ml-4">
-              <Suspense fallback={<BellPlaceholder />}>
-                <BellLoader userId={userId} />
-              </Suspense>
               <Link
                 href={`/profile/${username}`}
                 className="text-mist-400 hover:text-mist-100 transition-colors"
@@ -71,6 +68,9 @@ export async function Nav() {
                   Sign out
                 </button>
               </form>
+              <Suspense fallback={<BellPlaceholder />}>
+                <BellLoader userId={userId} />
+              </Suspense>
             </div>
           ) : (
             <div className="ml-auto flex items-center gap-4 text-sm sm:ml-4">
