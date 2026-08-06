@@ -7,7 +7,6 @@ import type { Album, Entry } from "@/db/schema";
 import {
   fetchExternalLinks,
   fetchRelease,
-  getArtistReleaseGroups,
   lookupAlbum,
   mergeLinks,
   type AlbumSearchResult,
@@ -15,8 +14,7 @@ import {
   type Track,
 } from "@/lib/musicbrainz";
 import { getSimilarArtists } from "@/lib/lastfm";
-import { getDeezerArtistAlbums } from "@/lib/deezer";
-import { getDeezerAlbum, isDeezerAlbumId } from "@/lib/deezer";
+import { getDeezerAlbum, getDeezerArtistAlbums, isDeezerAlbumId, searchDeezerArtists } from "@/lib/deezer";
 import { getSpotifyAlbum, isSpotifyId } from "@/lib/spotify";
 
 export interface EntryWithAlbum {
@@ -429,23 +427,22 @@ export async function getHomeRecommendations({
   const recentArtistRows = await db
     .select({
       artistName: albums.artistName,
-      artistMbid: albums.artistMbid,
       artistDeezerId: albums.artistSpotifyId,
     })
     .from(entries)
     .innerJoin(albums, eq(entries.albumId, albums.id))
     .where(and(
       eq(entries.userId, user.id),
-      or(isNotNull(albums.artistMbid), isNotNull(albums.artistSpotifyId)),
+      isNotNull(albums.artistSpotifyId),
     ))
     .orderBy(desc(entries.updatedAt))
-    .limit(30); // fetch more than needed to deduplicate by artist below
+    .limit(30);
 
-  // Deduplicate by artist, preserving recency order, keeping up to 6.
+  // Deduplicate by Deezer artist ID, preserving recency order, keeping up to 6.
   const seedArtists: typeof recentArtistRows = [];
   const seenArtistKeys = new Set<string>();
   for (const row of recentArtistRows) {
-    const key = row.artistMbid ?? row.artistName ?? "";
+    const key = row.artistDeezerId ?? row.artistName ?? "";
     if (!key || seenArtistKeys.has(key)) continue;
     seenArtistKeys.add(key);
     seedArtists.push(row);
@@ -454,79 +451,75 @@ export async function getHomeRecommendations({
 
   const recs: HomeRecommendation[] = [];
   const seenIds = new Set<string>();
-  const seedMbids = new Set(seedArtists.map(a => a.artistMbid).filter(Boolean) as string[]);
+  const seedDeezerIds = new Set(seedArtists.map(a => a.artistDeezerId).filter(Boolean) as string[]);
 
-  // Source 1: one unlogged studio album per seed artist.
-  for (const { artistMbid, artistDeezerId, artistName } of seedArtists) {
+  // Source 1: one unlogged studio album per seed artist (Deezer discography).
+  for (const { artistDeezerId, artistName } of seedArtists) {
     if (recs.length >= limit) break;
+    if (!artistDeezerId || !isDeezerAlbumId(artistDeezerId)) continue;
     try {
-      if (artistMbid) {
-        const { releaseGroups } = await getArtistReleaseGroups(artistMbid);
-        const pick = releaseGroups.find(
-          rg =>
-            rg.primaryType === "Album" &&
-            rg.secondaryTypes.length === 0 &&
-            !loggedIds.has(rg.mbid) &&
-            !seenIds.has(rg.mbid),
-        );
-        if (pick) {
-          recs.push({ ...pick, coverArtUrl: null });
-          seenIds.add(pick.mbid);
-        }
-      } else if (artistDeezerId && isDeezerAlbumId(artistDeezerId)) {
-        const deezerAlbums = await getDeezerArtistAlbums(artistDeezerId, artistName ?? undefined);
-        const pick = deezerAlbums.find(
-          a => a.albumType === "album" && !loggedIds.has(a.deezerId) && !seenIds.has(a.deezerId),
-        );
-        if (pick) {
-          recs.push({
-            mbid: pick.deezerId,
-            title: pick.title,
-            artistName: pick.artistName,
-            artistMbid: null,
-            year: pick.year,
-            releaseDate: pick.releaseDate,
-            primaryType: "Album",
-            secondaryTypes: [],
-            score: 0,
-            coverArtUrl: pick.artworkUrl,
-          });
-          seenIds.add(pick.deezerId);
-        }
+      const deezerAlbums = await getDeezerArtistAlbums(artistDeezerId, artistName ?? undefined);
+      const pick = deezerAlbums.find(
+        a => a.albumType === "album" && !loggedIds.has(a.deezerId) && !seenIds.has(a.deezerId),
+      );
+      if (pick) {
+        recs.push({
+          mbid: pick.deezerId,
+          title: pick.title,
+          artistName: pick.artistName,
+          artistMbid: null,
+          year: pick.year,
+          releaseDate: pick.releaseDate,
+          primaryType: "Album",
+          secondaryTypes: [],
+          score: 0,
+          coverArtUrl: pick.artworkUrl,
+        });
+        seenIds.add(pick.deezerId);
       }
     } catch {
-      // Skip if API is unavailable
+      // Skip if Deezer is unavailable
     }
   }
 
-  // Source 2: one album per similar artist (via Last.fm), to fill remaining slots.
+  // Source 2: one album per similar artist (Last.fm → Deezer), to fill remaining slots.
   if (recs.length < limit) {
-    for (const { artistMbid, artistName } of seedArtists) {
+    const seenSimArtistIds = new Set<string>(seedDeezerIds);
+    for (const { artistName } of seedArtists) {
       if (recs.length >= limit) break;
+      if (!artistName) continue;
       try {
-        const similar = await getSimilarArtists(
-          artistMbid ? { mbid: artistMbid } : { name: artistName ?? undefined },
-          { limit: 5 },
-        );
+        const similar = await getSimilarArtists({ name: artistName }, { limit: 5 });
         for (const sim of similar) {
-          if (!sim.mbid || recs.length >= limit) continue;
-          if (seedMbids.has(sim.mbid) || seenIds.has(sim.mbid)) continue;
+          if (recs.length >= limit) break;
           try {
-            const { releaseGroups } = await getArtistReleaseGroups(sim.mbid);
-            const pick = releaseGroups.find(
-              rg =>
-                rg.primaryType === "Album" &&
-                rg.secondaryTypes.length === 0 &&
-                !loggedIds.has(rg.mbid) &&
-                !seenIds.has(rg.mbid),
+            const deezerMatches = await searchDeezerArtists(sim.name, { limit: 1 });
+            if (!deezerMatches.length) continue;
+            const deezerArtist = deezerMatches[0];
+            if (seenSimArtistIds.has(deezerArtist.deezerId)) continue;
+            seenSimArtistIds.add(deezerArtist.deezerId);
+
+            const deezerAlbums = await getDeezerArtistAlbums(deezerArtist.deezerId, deezerArtist.name);
+            const pick = deezerAlbums.find(
+              a => a.albumType === "album" && !loggedIds.has(a.deezerId) && !seenIds.has(a.deezerId),
             );
             if (pick) {
-              recs.push({ ...pick, coverArtUrl: null });
-              seenIds.add(pick.mbid);
-              seenIds.add(sim.mbid); // prevent a second album from the same similar artist
+              recs.push({
+                mbid: pick.deezerId,
+                title: pick.title,
+                artistName: pick.artistName,
+                artistMbid: null,
+                year: pick.year,
+                releaseDate: pick.releaseDate,
+                primaryType: "Album",
+                secondaryTypes: [],
+                score: 0,
+                coverArtUrl: pick.artworkUrl,
+              });
+              seenIds.add(pick.deezerId);
             }
           } catch {
-            // Skip if MB is unavailable for this similar artist
+            // Skip if Deezer is unavailable for this similar artist
           }
         }
       } catch {
