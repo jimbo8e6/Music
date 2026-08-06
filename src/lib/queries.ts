@@ -425,8 +425,8 @@ export async function getHomeRecommendations({
     .where(eq(entries.userId, user.id));
   const loggedIds = new Set(loggedRows.map(r => r.albumId));
 
-  // Group by artistName so both MusicBrainz and Deezer albums qualify.
-  const topArtists = await db
+  // Seed artists: up to 6 distinct artists from the most recently updated entries.
+  const recentArtistRows = await db
     .select({
       artistName: albums.artistName,
       artistMbid: albums.artistMbid,
@@ -436,59 +436,62 @@ export async function getHomeRecommendations({
     .innerJoin(albums, eq(entries.albumId, albums.id))
     .where(and(
       eq(entries.userId, user.id),
-      isNotNull(entries.rating),
       or(isNotNull(albums.artistMbid), isNotNull(albums.artistSpotifyId)),
     ))
-    .groupBy(albums.artistName)
-    .having(sql`avg(${entries.rating}) >= 7`)
-    .orderBy(desc(sql`avg(${entries.rating})`))
-    .limit(3);
+    .orderBy(desc(entries.updatedAt))
+    .limit(30); // fetch more than needed to deduplicate by artist below
+
+  // Deduplicate by artist, preserving recency order, keeping up to 6.
+  const seedArtists: typeof recentArtistRows = [];
+  const seenArtistKeys = new Set<string>();
+  for (const row of recentArtistRows) {
+    const key = row.artistMbid ?? row.artistName ?? "";
+    if (!key || seenArtistKeys.has(key)) continue;
+    seenArtistKeys.add(key);
+    seedArtists.push(row);
+    if (seedArtists.length >= 6) break;
+  }
 
   const recs: HomeRecommendation[] = [];
   const seenIds = new Set<string>();
-  const topArtistMbids = new Set(topArtists.map(a => a.artistMbid).filter(Boolean) as string[]);
+  const seedMbids = new Set(seedArtists.map(a => a.artistMbid).filter(Boolean) as string[]);
 
-  // Source 1: unlogged studio albums by the user's own top-rated artists.
-  for (const { artistMbid, artistDeezerId, artistName } of topArtists) {
+  // Source 1: one unlogged studio album per seed artist.
+  for (const { artistMbid, artistDeezerId, artistName } of seedArtists) {
     if (recs.length >= limit) break;
     try {
       if (artistMbid) {
         const { releaseGroups } = await getArtistReleaseGroups(artistMbid);
-        for (const rg of releaseGroups) {
-          if (recs.length >= limit) break;
-          if (
+        const pick = releaseGroups.find(
+          rg =>
             rg.primaryType === "Album" &&
             rg.secondaryTypes.length === 0 &&
             !loggedIds.has(rg.mbid) &&
-            !seenIds.has(rg.mbid)
-          ) {
-            recs.push({ ...rg, coverArtUrl: null });
-            seenIds.add(rg.mbid);
-          }
+            !seenIds.has(rg.mbid),
+        );
+        if (pick) {
+          recs.push({ ...pick, coverArtUrl: null });
+          seenIds.add(pick.mbid);
         }
       } else if (artistDeezerId && isDeezerAlbumId(artistDeezerId)) {
         const deezerAlbums = await getDeezerArtistAlbums(artistDeezerId, artistName ?? undefined);
-        for (const a of deezerAlbums) {
-          if (recs.length >= limit) break;
-          if (
-            a.albumType === "album" &&
-            !loggedIds.has(a.deezerId) &&
-            !seenIds.has(a.deezerId)
-          ) {
-            recs.push({
-              mbid: a.deezerId,
-              title: a.title,
-              artistName: a.artistName,
-              artistMbid: null,
-              year: a.year,
-              releaseDate: a.releaseDate,
-              primaryType: "Album",
-              secondaryTypes: [],
-              score: 0,
-              coverArtUrl: a.artworkUrl,
-            });
-            seenIds.add(a.deezerId);
-          }
+        const pick = deezerAlbums.find(
+          a => a.albumType === "album" && !loggedIds.has(a.deezerId) && !seenIds.has(a.deezerId),
+        );
+        if (pick) {
+          recs.push({
+            mbid: pick.deezerId,
+            title: pick.title,
+            artistName: pick.artistName,
+            artistMbid: null,
+            year: pick.year,
+            releaseDate: pick.releaseDate,
+            primaryType: "Album",
+            secondaryTypes: [],
+            score: 0,
+            coverArtUrl: pick.artworkUrl,
+          });
+          seenIds.add(pick.deezerId);
         }
       }
     } catch {
@@ -496,9 +499,9 @@ export async function getHomeRecommendations({
     }
   }
 
-  // Source 2: albums by similar artists (via Last.fm), to fill remaining slots.
+  // Source 2: one album per similar artist (via Last.fm), to fill remaining slots.
   if (recs.length < limit) {
-    for (const { artistMbid, artistName } of topArtists) {
+    for (const { artistMbid, artistName } of seedArtists) {
       if (recs.length >= limit) break;
       try {
         const similar = await getSimilarArtists(
@@ -507,20 +510,20 @@ export async function getHomeRecommendations({
         );
         for (const sim of similar) {
           if (!sim.mbid || recs.length >= limit) continue;
-          if (topArtistMbids.has(sim.mbid)) continue;
+          if (seedMbids.has(sim.mbid) || seenIds.has(sim.mbid)) continue;
           try {
             const { releaseGroups } = await getArtistReleaseGroups(sim.mbid);
-            for (const rg of releaseGroups) {
-              if (recs.length >= limit) break;
-              if (
+            const pick = releaseGroups.find(
+              rg =>
                 rg.primaryType === "Album" &&
                 rg.secondaryTypes.length === 0 &&
                 !loggedIds.has(rg.mbid) &&
-                !seenIds.has(rg.mbid)
-              ) {
-                recs.push({ ...rg, coverArtUrl: null });
-                seenIds.add(rg.mbid);
-              }
+                !seenIds.has(rg.mbid),
+            );
+            if (pick) {
+              recs.push({ ...pick, coverArtUrl: null });
+              seenIds.add(pick.mbid);
+              seenIds.add(sim.mbid); // prevent a second album from the same similar artist
             }
           } catch {
             // Skip if MB is unavailable for this similar artist
