@@ -254,6 +254,19 @@ export function ready(): Promise<void> {
         );
       }
 
+      if (!(await tableExists("comments"))) {
+        await db.run(sql`CREATE TABLE IF NOT EXISTS comments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          entry_id INTEGER NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+          parent_id INTEGER,
+          body TEXT NOT NULL,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch())
+        )`);
+        await db.run(sql`CREATE INDEX IF NOT EXISTS comments_entry_idx ON comments (entry_id)`);
+        await db.run(sql`CREATE INDEX IF NOT EXISTS comments_user_idx ON comments (user_id)`);
+      }
+
       if (!(await columnExists("users", "email_verified"))) {
         await db.run(sql`ALTER TABLE users ADD email_verified INTEGER NOT NULL DEFAULT 0`);
       }

@@ -203,6 +203,21 @@ export const favourites = sqliteTable("favourites", {
   uniqueIndex("favourites_user_position_idx").on(t.userId, t.position),
 ]);
 
+/** Comments on a user's logged entry (review). Two-level: top-level + replies. */
+export const comments = sqliteTable("comments", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  entryId: integer("entry_id").notNull().references(() => entries.id, { onDelete: "cascade" }),
+  parentId: integer("parent_id"), // null = top-level; int = reply to that comment id
+  body: text("body").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+}, (t) => [
+  index("comments_entry_idx").on(t.entryId),
+  index("comments_user_idx").on(t.userId),
+]);
+
 /** Albums the user wants to hear but hasn't logged yet. */
 export const watchlist = sqliteTable("watchlist", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -217,6 +232,7 @@ export const watchlist = sqliteTable("watchlist", {
     .default(sql`(unixepoch())`),
 }, (t) => [uniqueIndex("watchlist_user_album_idx").on(t.userId, t.albumId)]);
 
+export type Comment = typeof comments.$inferSelect;
 export type EmailToken = typeof emailTokens.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type Album = typeof albums.$inferSelect;

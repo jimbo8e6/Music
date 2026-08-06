@@ -4,6 +4,7 @@ import { Suspense } from "react";
 
 import { AlbumSleeve } from "@/components/AlbumSleeve";
 import { BackButton } from "@/components/BackButton";
+import { CommentsSection } from "@/components/CommentsSection";
 import { OwnedFormatsButton } from "@/components/OwnedFormatsButton";
 import { PlayLinks } from "@/components/PlayLinks";
 import { Stars } from "@/components/Stars";
@@ -12,6 +13,7 @@ import { backCoverUrl, coverArtUrl } from "@/lib/coverart";
 import { formatDate, formatRelative } from "@/lib/format";
 import { loadAlbumOrNotFound } from "@/lib/loadAlbum";
 import {
+  getEntryComments,
   getEntryForAlbum,
   getExternalLinks,
   getOrFetchAlbum,
@@ -42,13 +44,16 @@ export default async function AlbumPage({
   const album = await loadAlbumOrNotFound(id);
 
   const headerStore = await headers();
-  const isLoggedIn = Boolean(headerStore.get("x-user-id"));
+  const currentUserId = headerStore.get("x-user-id") ?? null;
+  const isLoggedIn = Boolean(currentUserId);
 
   const [entry, onWatchlist, ownedFormats] = await Promise.all([
     getEntryForAlbum(album.id),
     isOnWatchlist(album.id),
     getOwnedFormats(album.id),
   ]);
+
+  const entryComments = entry ? await getEntryComments(entry.id) : [];
 
   // The tracklist needs a second MusicBrainz request, which the rate limiter
   // has to space a second behind the first. It streams in below instead of
@@ -193,6 +198,12 @@ export default async function AlbumPage({
                   </button>
                 </form>
               </div>
+
+              <CommentsSection
+                entryId={entry.id}
+                comments={entryComments}
+                currentUserId={currentUserId}
+              />
             </section>
           ) : isLoggedIn ? (
             <section className="border-ink-800 text-mist-400 rounded-lg border border-dashed px-5 py-8 text-sm">

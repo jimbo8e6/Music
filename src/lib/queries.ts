@@ -662,6 +662,48 @@ export async function isFollowing(followerId: string, followingId: string): Prom
   return Boolean(row);
 }
 
+export interface CommentRow {
+  id: number;
+  body: string;
+  parentId: number | null;
+  createdAt: Date;
+  userId: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+export interface ThreadedComment extends CommentRow {
+  replies: CommentRow[];
+}
+
+export async function getEntryComments(entryId: number): Promise<ThreadedComment[]> {
+  await ready();
+  const { comments, users } = schema;
+  const rows = await db
+    .select({
+      id: comments.id,
+      body: comments.body,
+      parentId: comments.parentId,
+      createdAt: comments.createdAt,
+      userId: comments.userId,
+      username: users.username,
+      displayName: users.displayName,
+      avatarUrl: users.avatarUrl,
+    })
+    .from(comments)
+    .innerJoin(users, eq(comments.userId, users.id))
+    .where(eq(comments.entryId, entryId))
+    .orderBy(comments.createdAt);
+
+  const topLevel = rows.filter((r) => r.parentId === null);
+  const replies = rows.filter((r) => r.parentId !== null);
+  return topLevel.map((c) => ({
+    ...c,
+    replies: replies.filter((r) => r.parentId === c.id),
+  }));
+}
+
 export async function searchUsers(query: string): Promise<PublicUser[]> {
   const q = query.trim();
   if (!q) return [];
