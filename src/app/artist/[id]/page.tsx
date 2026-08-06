@@ -21,7 +21,9 @@ import {
   getDeezerArtist,
   getDeezerArtistAlbums,
   isDeezerAlbumId,
+  searchDeezerArtists,
   type DeezerAlbumResult,
+  type DeezerArtistResult,
 } from "@/lib/deezer";
 import { coverArtUrlForMbid } from "@/lib/coverart";
 
@@ -132,6 +134,19 @@ async function DeezerDiscography({ artistId, artistName }: { artistId: string; a
     sections.set(section, bucket);
   }
 
+  // If there are no studio albums, search for similarly-named artists that
+  // might be the same act under a different Deezer profile (e.g. Suede vs
+  // The London Suede due to a trademark dispute).
+  let relatedArtists: DeezerArtistResult[] = [];
+  if (!sections.has("Albums")) {
+    try {
+      const results = await searchDeezerArtists(artistName);
+      relatedArtists = results.filter((a) => a.deezerId !== artistId).slice(0, 3);
+    } catch {
+      // non-fatal — just don't show the hint
+    }
+  }
+
   return (
     <div className="space-y-10">
       {DEEZER_SECTION_ORDER.filter((s) => sections.has(s)).map((section) => {
@@ -164,6 +179,25 @@ async function DeezerDiscography({ artistId, artistName }: { artistId: string; a
           </section>
         );
       })}
+
+      {relatedArtists.length > 0 && (
+        <div className="border-ink-800 rounded-lg border p-4">
+          <p className="text-mist-400 mb-3 text-sm">
+            Not finding albums? This artist may also appear under a different name on Deezer:
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {relatedArtists.map((a) => (
+              <a
+                key={a.deezerId}
+                href={`/artist/${a.deezerId}`}
+                className="bg-ink-800 hover:bg-ink-700 text-mist-200 rounded-md px-3 py-1.5 text-sm transition-colors"
+              >
+                {a.name} →
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

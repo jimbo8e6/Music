@@ -205,12 +205,12 @@ function toArtistResult(artist: RawDeezerArtist): DeezerArtistResult {
 
 export async function searchDeezerAlbums(
   query: string,
-  _options: { limit?: number } = {},
+  { limit = 50 }: { limit?: number } = {},
 ): Promise<DeezerAlbumResult[]> {
   if (!query.trim()) return [];
   const data = await deezerFetch<{ data: RawDeezerAlbum[] }>(
     "/search/album",
-    { q: query.trim(), limit: "20" },
+    { q: query.trim(), limit: String(limit) },
   );
   return (data.data ?? []).map((a) => toAlbumResult(a));
 }
