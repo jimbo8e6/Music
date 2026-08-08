@@ -499,3 +499,32 @@ export async function toggleWatchlist(formData: FormData): Promise<void> {
   revalidatePath("/watchlist");
   revalidatePath(`/album/${album.id}`);
 }
+
+export interface PreferencesFormState {
+  error?: string;
+  success?: boolean;
+}
+
+export async function savePreferences(
+  _prev: PreferencesFormState,
+  formData: FormData,
+): Promise<PreferencesFormState> {
+  const LIBRARY_SORTS = ["recent", "rating", "title", "artist", "year"];
+  const COLLECTION_SORTS = ["recent", "title", "artist", "year"];
+
+  const librarySort = String(formData.get("defaultLibrarySort") ?? "recent");
+  const collectionSort = String(formData.get("defaultCollectionSort") ?? "recent");
+
+  if (!LIBRARY_SORTS.includes(librarySort)) return { error: "Invalid library sort." };
+  if (!COLLECTION_SORTS.includes(collectionSort)) return { error: "Invalid collection sort." };
+
+  const user = await getCurrentUser();
+  await db
+    .update(users)
+    .set({ defaultLibrarySort: librarySort, defaultCollectionSort: collectionSort })
+    .where(eq(users.id, user.id));
+
+  revalidatePath("/library");
+  revalidatePath("/settings");
+  return { success: true };
+}

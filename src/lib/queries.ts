@@ -390,6 +390,19 @@ export async function getCollection(
   return rows;
 }
 
+export interface UserPreferences {
+  defaultLibrarySort: LibrarySort;
+  defaultCollectionSort: CollectionSort;
+}
+
+export async function getUserPreferences(): Promise<UserPreferences> {
+  const user = await getOptionalCurrentUser();
+  return {
+    defaultLibrarySort: (user?.defaultLibrarySort as LibrarySort | null) ?? "recent",
+    defaultCollectionSort: (user?.defaultCollectionSort as CollectionSort | null) ?? "recent",
+  };
+}
+
 export async function getProfileCollection(userId: string): Promise<{ album: Album; formats: string[] }[]> {
   await ready();
   return db

@@ -22,6 +22,10 @@ export const users = sqliteTable("users", {
   bio: text("bio"),
   avatarUrl: text("avatar_url"),
   emailVerified: integer("email_verified", { mode: "boolean" }).notNull().default(false),
+  /** Default sort for the Ratings tab in /library. Matches LibrarySort values. */
+  defaultLibrarySort: text("default_library_sort").default("recent"),
+  /** Default sort for the Collection tab in /library. Matches CollectionSort values. */
+  defaultCollectionSort: text("default_collection_sort").default("recent"),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),

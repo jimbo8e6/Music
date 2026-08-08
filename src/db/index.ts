@@ -238,6 +238,12 @@ export function ready(): Promise<void> {
       if (!(await columnExists("users", "password_hash"))) {
         await db.run(sql`ALTER TABLE users ADD password_hash text`);
       }
+      if (!(await columnExists("users", "default_library_sort"))) {
+        await db.run(sql`ALTER TABLE users ADD default_library_sort text DEFAULT 'recent'`);
+      }
+      if (!(await columnExists("users", "default_collection_sort"))) {
+        await db.run(sql`ALTER TABLE users ADD default_collection_sort text DEFAULT 'recent'`);
+      }
 
       if (!(await tableExists("favourites"))) {
         await db.run(

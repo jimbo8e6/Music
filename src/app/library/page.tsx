@@ -4,7 +4,7 @@ import { AlbumCard } from "@/components/AlbumCard";
 import { BackButton } from "@/components/BackButton";
 import { EmptyState } from "@/components/EmptyState";
 import { coverArtUrl } from "@/lib/coverart";
-import { getCollection, getEntries, type CollectionSort, type LibrarySort } from "@/lib/queries";
+import { getCollection, getEntries, getUserPreferences, type CollectionSort, type LibrarySort } from "@/lib/queries";
 
 export const metadata = { title: "Library" };
 export const dynamic = "force-dynamic";
@@ -44,10 +44,11 @@ export default async function LibraryPage({
 }) {
   const params = await searchParams;
   const view: ViewKey = params.view === "collection" ? "collection" : "ratings";
+  const prefs = await getUserPreferences();
 
   if (view === "collection") {
     const collectionSort =
-      (COLLECTION_SORTS.find((s) => s.key === params.sort)?.key ?? "recent") as CollectionSort;
+      (COLLECTION_SORTS.find((s) => s.key === params.sort)?.key ?? prefs.defaultCollectionSort) as CollectionSort;
     const items = await getCollection(collectionSort);
     return (
       <div className="space-y-6">
@@ -98,7 +99,7 @@ export default async function LibraryPage({
     );
   }
 
-  const sort = (SORTS.find((s) => s.key === params.sort)?.key ?? "recent") as LibrarySort;
+  const sort = (SORTS.find((s) => s.key === params.sort)?.key ?? prefs.defaultLibrarySort) as LibrarySort;
   const filter = FILTERS.find((f) => f.key === params.filter)?.key ?? "all";
 
   const rows = await getEntries({
