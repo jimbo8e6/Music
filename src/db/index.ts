@@ -204,18 +204,34 @@ export function ready(): Promise<void> {
       if (connection.problem) throw new Error(connection.problem);
 
       const migrationsFolder = path.join(process.cwd(), "drizzle");
+
+      // Apply pending migrations. On a serverless host multiple instances can
+      // race to apply the first migration; the loser gets "table already exists".
+      // Swallow that — the winner applied the schema and we can carry on.
       try {
         await baselinePushedDatabase(migrationsFolder);
         await migrate(db, { migrationsFolder });
+      } catch (error) {
+        if (!(await tableExists("users"))) {
+          const where = connection.remote
+            ? `the Turso database at ${connection.url}`
+            : `the database file ${connection.url}`;
+          throw new Error(
+            `Could not prepare ${where}. Check the credentials and that ./drizzle is present. Original error: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+        // users exists — a race or a pre-existing schema; safety checks below
+        // will fill in any columns the migration didn't get to apply.
+      }
 
-      // Safety: if the DB was baselined from a db:push that predated this
-      // column, the migration was marked as applied without running the DDL.
+      // Safety checks: run after every startup regardless of whether the
+      // migration above succeeded, so a schema update is never silently skipped.
       if (!(await columnExists("albums", "artist_spotify_id"))) {
         await db.run(sql`ALTER TABLE albums ADD artist_spotify_id text`);
       }
 
-      // Safety: migration may have been silently swallowed by the race
-      // condition catch below on a previous cold start.
       if (!(await tableExists("collection"))) {
         await db.run(
           sql`CREATE TABLE IF NOT EXISTS collection (
@@ -237,6 +253,9 @@ export function ready(): Promise<void> {
       }
       if (!(await columnExists("users", "password_hash"))) {
         await db.run(sql`ALTER TABLE users ADD password_hash text`);
+      }
+      if (!(await columnExists("users", "email_verified"))) {
+        await db.run(sql`ALTER TABLE users ADD email_verified INTEGER NOT NULL DEFAULT 0`);
       }
       if (!(await columnExists("users", "default_library_sort"))) {
         await db.run(sql`ALTER TABLE users ADD default_library_sort text DEFAULT 'recent'`);
@@ -271,10 +290,6 @@ export function ready(): Promise<void> {
         )`);
         await db.run(sql`CREATE INDEX IF NOT EXISTS comments_entry_idx ON comments (entry_id)`);
         await db.run(sql`CREATE INDEX IF NOT EXISTS comments_user_idx ON comments (user_id)`);
-      }
-
-      if (!(await columnExists("users", "email_verified"))) {
-        await db.run(sql`ALTER TABLE users ADD email_verified INTEGER NOT NULL DEFAULT 0`);
       }
 
       if (!(await tableExists("email_tokens"))) {
@@ -343,21 +358,6 @@ export function ready(): Promise<void> {
         await db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS comment_likes_user_comment_idx ON comment_likes (user_id, comment_id)`);
         await db.run(sql`CREATE INDEX IF NOT EXISTS comment_likes_comment_idx ON comment_likes (comment_id)`);
       }
-    } catch (error) {
-      // Serverless starts several instances at once, so two can race to apply
-      // the first migration and the loser fails on "table already exists".
-      // If the schema is there, someone won and there is nothing to report.
-      if (await tableExists("users")) return;
-
-      const where = connection.remote
-        ? `the Turso database at ${connection.url}`
-        : `the database file ${connection.url}`;
-      throw new Error(
-        `Could not prepare ${where}. Check the credentials and that ./drizzle is present. Original error: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
     })();
     globalForDb.__waxReady = p;
     // Don't cache rejections: allow a retry on the next request after a
