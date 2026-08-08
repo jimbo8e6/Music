@@ -368,14 +368,25 @@ export async function getOwnedFormats(albumId: string): Promise<string[]> {
   return row?.formats ?? [];
 }
 
-export async function getCollection(): Promise<{ album: Album; formats: string[] }[]> {
+export type CollectionSort = "recent" | "artist" | "title" | "year";
+
+export async function getCollection(
+  sort: CollectionSort = "recent",
+): Promise<{ album: Album; formats: string[] }[]> {
   const user = await getCurrentUser();
+  const orderBy = {
+    recent: [desc(collection.createdAt)],
+    title: [albums.title],
+    artist: [albums.artistName, albums.year],
+    year: [desc(albums.year)],
+  }[sort];
+
   const rows = await db
     .select({ album: albums, formats: collection.formats })
     .from(collection)
     .innerJoin(albums, eq(collection.albumId, albums.id))
     .where(eq(collection.userId, user.id))
-    .orderBy(desc(collection.createdAt));
+    .orderBy(...orderBy);
   return rows;
 }
 

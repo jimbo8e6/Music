@@ -4,7 +4,7 @@ import { AlbumCard } from "@/components/AlbumCard";
 import { BackButton } from "@/components/BackButton";
 import { EmptyState } from "@/components/EmptyState";
 import { coverArtUrl } from "@/lib/coverart";
-import { getCollection, getEntries, type LibrarySort } from "@/lib/queries";
+import { getCollection, getEntries, type CollectionSort, type LibrarySort } from "@/lib/queries";
 
 export const metadata = { title: "Library" };
 export const dynamic = "force-dynamic";
@@ -12,6 +12,13 @@ export const dynamic = "force-dynamic";
 const SORTS: { key: LibrarySort; label: string }[] = [
   { key: "recent", label: "Recently logged" },
   { key: "rating", label: "Highest rated" },
+  { key: "artist", label: "Artist" },
+  { key: "title", label: "Title" },
+  { key: "year", label: "Release year" },
+];
+
+const COLLECTION_SORTS: { key: CollectionSort; label: string }[] = [
+  { key: "recent", label: "Recently added" },
   { key: "artist", label: "Artist" },
   { key: "title", label: "Title" },
   { key: "year", label: "Release year" },
@@ -39,7 +46,9 @@ export default async function LibraryPage({
   const view: ViewKey = params.view === "collection" ? "collection" : "ratings";
 
   if (view === "collection") {
-    const items = await getCollection();
+    const collectionSort =
+      (COLLECTION_SORTS.find((s) => s.key === params.sort)?.key ?? "recent") as CollectionSort;
+    const items = await getCollection(collectionSort);
     return (
       <div className="space-y-6">
         <BackButton />
@@ -50,7 +59,16 @@ export default async function LibraryPage({
               {items.length}
             </span>
           </h1>
-          <ViewTabs active={view} />
+
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <ViewTabs active={view} />
+            <Tabs
+              options={COLLECTION_SORTS}
+              active={collectionSort}
+              paramKey="sort"
+              otherParams={{ view: "collection" }}
+            />
+          </div>
         </div>
 
         {items.length === 0 ? (
