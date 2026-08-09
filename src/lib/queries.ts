@@ -345,6 +345,106 @@ export async function getStats(): Promise<LibraryStats> {
   };
 }
 
+export interface DetailedStats {
+  logged: number;
+  rated: number;
+  reviewed: number;
+  averageRating: number | null;
+  /** Count per half-star bucket: index 0 = 0.5 ★, index 9 = 5.0 ★ */
+  distribution: number[];
+  /** Sum of all track durations in ms, from albums that have tracklist data. */
+  totalMs: number;
+  /** How many logged albums contributed duration to totalMs. */
+  albumsWithDuration: number;
+  /** Albums logged per decade, e.g. { decade: 1990, count: 14 } */
+  decadeBreakdown: { decade: number; count: number }[];
+  /** Top genres by frequency across logged albums. */
+  genreBreakdown: { genre: string; count: number }[];
+}
+
+export async function getDetailedStats(userId: string): Promise<DetailedStats> {
+  await ready();
+
+  const [totals, buckets, allAlbums, decadeRows] = await Promise.all([
+    db
+      .select({
+        logged: count(),
+        rated: sql<number>`sum(case when ${entries.rating} is not null then 1 else 0 end)`,
+        reviewed: sql<number>`sum(case when length(trim(coalesce(${entries.reviewText}, ''))) > 0 then 1 else 0 end)`,
+        averageRating: avg(entries.rating),
+      })
+      .from(entries)
+      .where(eq(entries.userId, userId))
+      .get(),
+
+    db
+      .select({ rating: entries.rating, total: count() })
+      .from(entries)
+      .where(and(eq(entries.userId, userId), isNotNull(entries.rating)))
+      .groupBy(entries.rating),
+
+    db
+      .select({ tracks: albums.tracks, genres: albums.genres })
+      .from(entries)
+      .innerJoin(albums, eq(entries.albumId, albums.id))
+      .where(eq(entries.userId, userId)),
+
+    db
+      .select({
+        decade: sql<number>`(${albums.year} / 10 * 10)`,
+        count: count(),
+      })
+      .from(entries)
+      .innerJoin(albums, eq(entries.albumId, albums.id))
+      .where(and(eq(entries.userId, userId), isNotNull(albums.year)))
+      .groupBy(sql`(${albums.year} / 10 * 10)`)
+      .orderBy(sql`(${albums.year} / 10 * 10)`),
+  ]);
+
+  const distribution = Array<number>(10).fill(0);
+  for (const b of buckets) {
+    if (b.rating) distribution[b.rating - 1] = b.total;
+  }
+
+  let totalMs = 0;
+  let albumsWithDuration = 0;
+  const genreCounts = new Map<string, number>();
+
+  for (const { tracks, genres } of allAlbums) {
+    if (tracks && tracks.length > 0) {
+      const albumMs = tracks.reduce((sum, t) => sum + (t.lengthMs ?? 0), 0);
+      if (albumMs > 0) {
+        totalMs += albumMs;
+        albumsWithDuration++;
+      }
+    }
+    if (genres) {
+      for (const g of genres) {
+        if (g) genreCounts.set(g, (genreCounts.get(g) ?? 0) + 1);
+      }
+    }
+  }
+
+  const genreBreakdown = [...genreCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([genre, count]) => ({ genre, count }));
+
+  const average = totals?.averageRating;
+
+  return {
+    logged: totals?.logged ?? 0,
+    rated: Number(totals?.rated ?? 0),
+    reviewed: Number(totals?.reviewed ?? 0),
+    averageRating: average === null || average === undefined ? null : Number(average),
+    distribution,
+    totalMs,
+    albumsWithDuration,
+    decadeBreakdown: decadeRows,
+    genreBreakdown,
+  };
+}
+
 export async function getWatchlist(): Promise<Album[]> {
   const user = await getCurrentUser();
   const rows = await db

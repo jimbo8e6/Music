@@ -111,12 +111,20 @@ export default async function ProfilePage({
         )}
 
         {isOwnProfile && (
-          <Link
-            href="/library"
-            className="text-mist-400 hover:text-mist-100 shrink-0 text-sm transition-colors"
-          >
-            Your library →
-          </Link>
+          <div className="flex shrink-0 flex-col items-end gap-1.5">
+            <Link
+              href="/library"
+              className="text-mist-400 hover:text-mist-100 text-sm transition-colors"
+            >
+              Your library →
+            </Link>
+            <Link
+              href={`/profile/${profileUser.username}/stats`}
+              className="text-mist-400 hover:text-mist-100 text-sm transition-colors"
+            >
+              Your stats →
+            </Link>
+          </div>
         )}
       </div>
 
