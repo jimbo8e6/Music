@@ -28,16 +28,19 @@ export function CommentsSection({
   entryId,
   comments,
   currentUserId,
+  onMutation,
 }: {
   entryId: number;
   comments: CommentNode[];
   currentUserId: string | null;
+  onMutation?: () => void;
 }) {
   const router = useRouter();
   const [showForm, setShowForm] = useState(false);
 
   const afterMutation = () => {
     router.refresh();
+    onMutation?.();
     setShowForm(false);
   };
 
@@ -67,7 +70,7 @@ export function CommentsSection({
               node={c}
               entryId={entryId}
               currentUserId={currentUserId}
-              onMutation={() => router.refresh()}
+              onMutation={() => { router.refresh(); onMutation?.(); }}
               depth={0}
             />
           ))}

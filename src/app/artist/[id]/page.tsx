@@ -1,13 +1,10 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
-import { and, eq, inArray } from "drizzle-orm";
-
 import { AlbumCard } from "@/components/AlbumCard";
 import { AlbumGridSkeleton } from "@/components/AlbumGridSkeleton";
 import { activeYears } from "@/components/ArtistCard";
 import { BackButton } from "@/components/BackButton";
-import { db, getOptionalCurrentUser, schema } from "@/db";
 import {
   MusicBrainzError,
   getArtistReleaseGroups,
@@ -27,7 +24,7 @@ import {
 } from "@/lib/deezer";
 import { coverArtUrlForMbid } from "@/lib/coverart";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 3600;
 
 export async function generateMetadata({
   params,
@@ -120,8 +117,6 @@ async function DeezerDiscography({ artistId, artistName }: { artistId: string; a
     );
   }
 
-  const ratings = await ratingsFor(albums.map((a) => a.deezerId));
-
   const sorted = [...albums].sort((a, b) =>
     (b.releaseDate ?? "0000") > (a.releaseDate ?? "0000") ? 1 : -1,
   );
@@ -179,7 +174,6 @@ async function DeezerDiscography({ artistId, artistName }: { artistId: string; a
                   artist={album.artistName}
                   year={album.year}
                   coverUrl={album.artworkUrl}
-                  rating={ratings.get(album.deezerId) ?? null}
                   priority={section === "Albums" && index < 6}
                 />
               ))}
@@ -292,8 +286,6 @@ async function MbDiscography({ artistMbid }: { artistMbid: string }) {
     );
   }
 
-  const ratings = await ratingsFor(releaseGroups.map((r) => r.mbid));
-
   const sections = new Map<ReleaseSection, AlbumSearchResult[]>();
   for (const release of releaseGroups) {
     const section = sectionOf(release);
@@ -326,7 +318,6 @@ async function MbDiscography({ artistMbid }: { artistMbid: string }) {
                   artist={release.artistName}
                   year={release.year}
                   coverUrl={coverArtUrlForMbid(release.mbid, 500)}
-                  rating={ratings.get(release.mbid) ?? null}
                   priority={section === "Albums" && index < 6}
                 />
               ))}
@@ -355,22 +346,3 @@ function DiscographySkeleton() {
   );
 }
 
-async function ratingsFor(ids: string[]): Promise<Map<string, number | null>> {
-  if (ids.length === 0) return new Map();
-
-  try {
-    const user = await getOptionalCurrentUser();
-    if (!user) return new Map();
-
-    const rows = await db
-      .select({ albumId: schema.entries.albumId, rating: schema.entries.rating })
-      .from(schema.entries)
-      .where(
-        and(eq(schema.entries.userId, user.id), inArray(schema.entries.albumId, ids)),
-      );
-
-    return new Map(rows.map((row) => [row.albumId, row.rating]));
-  } catch {
-    return new Map();
-  }
-}
