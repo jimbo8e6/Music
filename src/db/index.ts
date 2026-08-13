@@ -358,6 +358,11 @@ export function ready(): Promise<void> {
         await db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS comment_likes_user_comment_idx ON comment_likes (user_id, comment_id)`);
         await db.run(sql`CREATE INDEX IF NOT EXISTS comment_likes_comment_idx ON comment_likes (comment_id)`);
       }
+
+      // Index for community rating queries (getAlbumStats, getAlbumCommunityReviews)
+      // which filter by album_id alone — the existing (user_id, album_id) unique index
+      // cannot be used for album_id-only lookups, causing full table scans.
+      await db.run(sql`CREATE INDEX IF NOT EXISTS entries_album_idx ON entries (album_id)`);
     })();
     globalForDb.__waxReady = p;
     // Don't cache rejections: allow a retry on the next request after a
