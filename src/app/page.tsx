@@ -2,14 +2,22 @@ import { Suspense } from "react";
 import Link from "next/link";
 
 import { AlbumCard } from "@/components/AlbumCard";
+import { LandingPage } from "@/components/LandingPage";
 import { coverArtUrl } from "@/lib/coverart";
 import { getTopAlbums, type LastFmAlbum } from "@/lib/lastfm";
 import { searchDeezerAlbums } from "@/lib/deezer";
 import { getHomeRecommendations, type HomeRecommendation } from "@/lib/queries";
+import { getOptionalCurrentUser } from "@/db";
 
 export const dynamic = "force-dynamic";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const user = await getOptionalCurrentUser();
+
+  if (!user) {
+    return <LandingPage />;
+  }
+
   return (
     <div className="space-y-12">
       <Suspense fallback={<RowSkeleton />}>
