@@ -5,7 +5,7 @@ import { HeroCanvas } from "./HeroCanvas";
 const features = [
   {
     title: "Rate & review",
-    desc: "Half-star ratings from 0.5 to 5. Write a full review when words matter. Your take, precisely recorded.",
+    desc: "Half-star ratings from 0.5 to 5. Write as much or as little as you like — a score, a sentence, or a proper essay.",
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
@@ -14,7 +14,7 @@ const features = [
   },
   {
     title: "Track your collection",
-    desc: "Log the physical formats you own — vinyl, CD, cassette. Know exactly what's on your shelf.",
+    desc: "Mark the formats you own alongside what you've heard. Vinyl, CD, cassette — finally know what's actually on your shelves.",
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/>
@@ -23,7 +23,7 @@ const features = [
   },
   {
     title: "Stats & insights",
-    desc: "Your listening habits visualised — decades, genres, top artists. Your year in music, all in one place.",
+    desc: "Decades listened, genres explored, artists you keep coming back to. All pulled from your own logs.",
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
@@ -32,7 +32,7 @@ const features = [
   },
   {
     title: "Follow friends",
-    desc: "See what people you trust are listening to. Community ratings and reviews on every album page.",
+    desc: "See what people you follow are rating. Real reviews from real listeners on every album page.",
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
@@ -101,7 +101,7 @@ export function LandingPage() {
               href="/register"
               className="bg-accent-500 hover:bg-accent-400 text-ink-950 inline-flex items-center gap-1.5 rounded-lg px-7 py-3 text-[15px] font-bold transition-colors"
             >
-              Start for free
+              Get started
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
             </Link>
             <Link
@@ -121,12 +121,12 @@ export function LandingPage() {
 
       {/* ── Features ─────────────────────────────────────────── */}
       <section className="mx-auto max-w-6xl px-4 py-24">
-        <p className="text-accent-500 mb-3 text-[11px] font-bold uppercase tracking-[0.12em]">Everything you need</p>
+        <p className="text-accent-500 mb-3 text-[11px] font-bold uppercase tracking-[0.12em]">What's included</p>
         <h2 className="text-mist-100 mb-3 text-4xl font-extrabold tracking-[-0.03em] leading-tight">
-          Built for people who care<br className="hidden sm:block" /> about music
+          Keep a proper record<br className="hidden sm:block" /> of what you&apos;ve heard
         </h2>
         <p className="text-mist-400 max-w-md leading-relaxed">
-          Not just another list app. Wax is a full listening journal for the serious collector.
+          Ratings, reviews, physical collection, stats, friends — it&apos;s all here.
         </p>
 
         <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -199,10 +199,10 @@ export function LandingPage() {
       <section className="mx-auto max-w-6xl px-4 pb-24 text-center">
         <p className="text-accent-500 mb-3 text-[11px] font-bold uppercase tracking-[0.12em]">Join Wax</p>
         <h2 className="text-mist-100 mx-auto mb-3 max-w-lg text-4xl font-extrabold tracking-[-0.03em] leading-tight">
-          Start logging your music today
+          Every album you&apos;ve loved deserves a record
         </h2>
         <p className="text-mist-400 mx-auto mb-10 max-w-sm leading-relaxed">
-          Free, forever. No ads. Your catalogue, your way.
+          Sign up and start building your library.
         </p>
         <Link
           href="/register"
