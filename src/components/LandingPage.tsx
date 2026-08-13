@@ -138,8 +138,7 @@ export function LandingPage() {
               <div className="bg-accent-500/10 text-accent-500 mb-5 flex h-10 w-10 items-center justify-center rounded-[10px]">
                 {f.icon}
               </div>
-              <h3 className="text-mist-100 mb-2 text-[15px] font-bold tracking-[-0.01em]">{f.title}</h3>
-              <p className="text-mist-400 text-sm leading-relaxed">{f.desc}</p>
+              <h3 className="text-mist-100 text-[15px] font-bold tracking-[-0.01em]">{f.title}</h3>
             </div>
           ))}
         </div>
