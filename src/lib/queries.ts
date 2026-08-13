@@ -76,6 +76,11 @@ export const getOrFetchAlbum = cache(async (id: string): Promise<Album | null> =
           artistName: detail.artistName,
           coverArtUrl: detail.artworkUrl,
         },
+        setWhere: or(
+          ne(albums.title, detail.title),
+          ne(albums.artistName, detail.artistName),
+          ne(albums.coverArtUrl, detail.artworkUrl ?? ""),
+        ),
       })
       .returning()
       .get();
@@ -124,6 +129,11 @@ export const getOrFetchAlbum = cache(async (id: string): Promise<Album | null> =
           artistName: detail.artistName,
           coverArtUrl: detail.artworkUrl,
         },
+        setWhere: or(
+          ne(albums.title, detail.title),
+          ne(albums.artistName, detail.artistName),
+          ne(albums.coverArtUrl, detail.artworkUrl ?? ""),
+        ),
       })
       .returning()
       .get();
@@ -153,6 +163,10 @@ export const getOrFetchAlbum = cache(async (id: string): Promise<Album | null> =
     .onConflictDoUpdate({
       target: albums.id,
       set: { title: detail.title, artistName: detail.artistName },
+      setWhere: or(
+        ne(albums.title, detail.title),
+        ne(albums.artistName, detail.artistName),
+      ),
     })
     .returning()
     .get();
