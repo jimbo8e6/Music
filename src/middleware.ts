@@ -9,6 +9,8 @@ const PUBLIC_PATHS = new Set(["/", "/search", "/people"]);
 const PUBLIC_PREFIXES = ["/album/", "/artist/", "/profile/"];
 
 function isPublic(pathname: string): boolean {
+  // API routes handle their own auth — never redirect them
+  if (pathname.startsWith("/api/")) return true;
   // Log form always requires auth even though /album/* is otherwise public
   if (/^\/album\/[^/]+\/log(\/|$)/.test(pathname)) return false;
   if (AUTH_ONLY_PATHS.has(pathname)) return true;
@@ -42,5 +44,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
