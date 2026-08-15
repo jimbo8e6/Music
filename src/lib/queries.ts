@@ -538,6 +538,18 @@ export async function isOnWatchlist(albumId: string): Promise<boolean> {
   return Boolean(row);
 }
 
+// Artists excluded from all organic recommendations (search still works normally).
+// Normalised to lowercase for comparison.
+const RECOMMENDATION_BLOCKLIST = new Set([
+  "lostprophets",
+  "lost prophets",
+]);
+
+function isBlocklisted(artistName: string | null | undefined): boolean {
+  if (!artistName) return false;
+  return RECOMMENDATION_BLOCKLIST.has(artistName.toLowerCase());
+}
+
 /**
  * Albums the user probably wants to hear next.
  *
@@ -595,6 +607,7 @@ export async function getHomeRecommendations({
   for (const { artistDeezerId, artistName } of seedArtists) {
     if (recs.length >= limit) break;
     if (!artistDeezerId || !isDeezerAlbumId(artistDeezerId)) continue;
+    if (isBlocklisted(artistName)) continue;
     try {
       const deezerAlbums = await getDeezerArtistAlbums(artistDeezerId, artistName ?? undefined);
       const pick = deezerAlbums.find(
@@ -635,6 +648,7 @@ export async function getHomeRecommendations({
             if (!deezerMatches.length) continue;
             const deezerArtist = deezerMatches[0];
             if (seenSimArtistIds.has(deezerArtist.deezerId)) continue;
+            if (isBlocklisted(deezerArtist.name)) continue;
             seenSimArtistIds.add(deezerArtist.deezerId);
 
             const deezerAlbums = await getDeezerArtistAlbums(deezerArtist.deezerId, deezerArtist.name);
