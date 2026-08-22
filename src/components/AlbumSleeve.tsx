@@ -192,7 +192,7 @@ function TrackTitle({ title }: { title: string }) {
   return (
     <button
       type="button"
-      onClick={() => setExpanded((e) => !e)}
+      onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
       title={title}
       className={`text-mist-100 min-w-0 flex-1 text-left ${expanded ? "break-words" : "truncate"}`}
     >
