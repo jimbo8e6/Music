@@ -72,7 +72,12 @@ export function AlbumSleeve({
         data-flipped={flipped}
       >
         <div className="sleeve-inner">
-          <div className="sleeve-face">
+          <button
+            type="button"
+            onClick={() => setFlipped(true)}
+            className="sleeve-face cursor-pointer"
+            aria-label="Show tracklist"
+          >
             <AlbumArt
               src={frontUrl}
               title={title}
@@ -80,9 +85,14 @@ export function AlbumSleeve({
               sizes="(max-width: 768px) 100vw, 320px"
               priority
             />
-          </div>
+          </button>
 
-          <div className="sleeve-face sleeve-back bg-ink-900">
+          <button
+            type="button"
+            onClick={() => setFlipped(false)}
+            className="sleeve-face sleeve-back bg-ink-900 cursor-pointer"
+            aria-label="Show front cover"
+          >
             {showBackImage ? (
               <Image
                 src={backUrl!}
@@ -96,7 +106,7 @@ export function AlbumSleeve({
             ) : (
               <TrackPanel load={load} />
             )}
-          </div>
+          </button>
         </div>
       </div>
 
