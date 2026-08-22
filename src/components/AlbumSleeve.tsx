@@ -166,9 +166,7 @@ function TrackPanel({ load }: { load: Load }) {
                   <span className="text-mist-400 w-5 shrink-0 text-right tabular-nums">
                     {track.position}
                   </span>
-                  <span className="text-mist-100 min-w-0 flex-1 truncate" title={track.title}>
-                    {track.title}
-                  </span>
+                  <TrackTitle title={track.title} />
                   <span className="text-mist-400 shrink-0 tabular-nums">
                     {formatDuration(track.lengthMs)}
                   </span>
@@ -186,5 +184,19 @@ function TrackPanel({ load }: { load: Load }) {
         </p>
       )}
     </div>
+  );
+}
+
+function TrackTitle({ title }: { title: string }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => setExpanded((e) => !e)}
+      title={title}
+      className={`text-mist-100 min-w-0 flex-1 text-left ${expanded ? "break-words" : "truncate"}`}
+    >
+      {title}
+    </button>
   );
 }
