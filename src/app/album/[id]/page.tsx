@@ -10,7 +10,7 @@ import { UserAlbumActions } from "@/components/UserAlbumActions";
 import { UserAlbumProvider } from "@/components/UserAlbumContext";
 import { UserEntrySection } from "@/components/UserEntrySection";
 import { backCoverUrl, coverArtUrl } from "@/lib/coverart";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatStars } from "@/lib/format";
 import { loadAlbumOrNotFound } from "@/lib/loadAlbum";
 import { getAlbumStats, getExternalLinks, getOrFetchAlbum, getTrackCount } from "@/lib/queries";
 
@@ -98,17 +98,29 @@ export default async function AlbumPage({
               )}
             </header>
 
-            {album.genres && album.genres.length > 0 && (
-              <ul className="flex flex-wrap gap-2">
-                {album.genres.map((genre) => (
-                  <li
+            {(album.genres && album.genres.length > 0 || albumStats.totalRatings > 0) && (
+              <div className="flex flex-wrap items-center gap-2">
+                {album.genres?.map((genre) => (
+                  <span
                     key={genre}
                     className="border-ink-700 text-mist-300 rounded-full border px-3 py-1 text-xs"
                   >
                     {genre}
-                  </li>
+                  </span>
                 ))}
-              </ul>
+                {albumStats.totalRatings > 0 && (
+                  <a
+                    href="#community-ratings"
+                    className="border-ink-700 text-star hover:border-ink-600 flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors"
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                    </svg>
+                    {formatStars(albumStats.average)}
+                    <span className="text-mist-500">({albumStats.totalRatings})</span>
+                  </a>
+                )}
+              </div>
             )}
 
             <UserEntrySection albumId={album.id} />
@@ -130,7 +142,7 @@ export default async function AlbumPage({
 
         {/* Community stats + reviews below the main grid */}
         {albumStats.totalRatings > 0 && (
-          <section className="border-ink-800 space-y-4 border-t pt-6">
+          <section id="community-ratings" className="border-ink-800 space-y-4 border-t pt-6">
             <h2 className="text-mist-400 text-xs font-semibold uppercase tracking-wider">
               Community ratings
             </h2>
