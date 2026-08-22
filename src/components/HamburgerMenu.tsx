@@ -72,13 +72,6 @@ export function HamburgerMenu({ username }: { username: string }) {
             >
               @{username}
             </Link>
-            <Link
-              href="/settings"
-              onClick={() => setOpen(false)}
-              className="text-mist-300 hover:text-mist-100 hover:bg-ink-800 block px-4 py-2.5 text-sm transition-colors"
-            >
-              Settings
-            </Link>
             <form action={logout}>
               <button
                 type="submit"

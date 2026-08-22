@@ -124,6 +124,12 @@ export default async function ProfilePage({
             >
               Your stats →
             </Link>
+            <Link
+              href="/settings"
+              className="text-mist-400 hover:text-mist-100 text-sm transition-colors"
+            >
+              Settings →
+            </Link>
           </div>
         )}
       </div>
