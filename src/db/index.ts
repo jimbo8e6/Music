@@ -363,6 +363,10 @@ export function ready(): Promise<void> {
       // which filter by album_id alone — the existing (user_id, album_id) unique index
       // cannot be used for album_id-only lookups, causing full table scans.
       await db.run(sql`CREATE INDEX IF NOT EXISTS entries_album_idx ON entries (album_id)`);
+
+      // Index for artist-page queries that filter albums by Deezer artist ID.
+      // Without this every artist page visit scans the whole albums table.
+      await db.run(sql`CREATE INDEX IF NOT EXISTS albums_artist_deezer_idx ON albums (artist_spotify_id)`);
     })();
     globalForDb.__waxReady = p;
     // Don't cache rejections: allow a retry on the next request after a

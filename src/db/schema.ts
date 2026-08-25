@@ -103,6 +103,7 @@ export const albums = sqliteTable("albums", {
   uniqueIndex("albums_mbid_idx").on(t.mbid),
   index("albums_artist_idx").on(t.artistName),
   index("albums_title_idx").on(t.title),
+  index("albums_artist_deezer_idx").on(t.artistSpotifyId),
 ]);
 
 /**
