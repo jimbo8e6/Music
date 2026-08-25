@@ -1,10 +1,8 @@
-import { like } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 
-import { db, schema } from "@/db";
+import { db, ready } from "@/db";
 
-// Protect with a secret so this can't be called by anyone.
-// Set ADMIN_SECRET in your environment variables.
 const ADMIN_SECRET = process.env.ADMIN_SECRET;
 
 export async function GET(req: NextRequest) {
@@ -18,10 +16,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing pattern query param" }, { status: 400 });
   }
 
-  const result = await db
-    .delete(schema.mbCache)
-    .where(like(schema.mbCache.url, pattern))
-    .returning({ url: schema.mbCache.url });
+  await ready();
 
-  return NextResponse.json({ deleted: result.length, urls: result.map((r) => r.url) });
+  const before = await db.get<{ count: number }>(
+    sql`SELECT count(*) as count FROM mb_cache WHERE url LIKE ${pattern}`,
+  );
+  await db.run(sql`DELETE FROM mb_cache WHERE url LIKE ${pattern}`);
+
+  return NextResponse.json({ deleted: before?.count ?? 0 });
 }
