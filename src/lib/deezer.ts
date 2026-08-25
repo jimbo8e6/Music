@@ -210,7 +210,7 @@ export async function searchDeezerAlbums(
   if (!query.trim()) return [];
   const data = await deezerFetch<{ data: RawDeezerAlbum[] }>(
     "/search/album",
-    { q: query.trim(), limit: String(limit), strict: "on" },
+    { q: query.trim(), limit: String(limit) },
   );
   // Deezer strict mode still returns partial word matches, so enforce that
   // every query token appears in the album title or artist name.
