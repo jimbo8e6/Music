@@ -212,9 +212,16 @@ export async function searchDeezerAlbums(
     "/search/album",
     { q: query.trim(), limit: String(limit), strict: "on" },
   );
+  // Deezer strict mode still returns partial word matches, so enforce that
+  // every query token appears in the album title or artist name.
+  const tokens = query.trim().toLowerCase().replace(/[^\w\s]/g, " ").split(/\s+/).filter(Boolean);
   return (data.data ?? [])
     .map((a) => toAlbumResult(a))
-    .filter((a) => a.albumType !== "single");
+    .filter((a) => a.albumType !== "single")
+    .filter((a) => {
+      const haystack = `${a.title} ${a.artistName}`.toLowerCase().replace(/[^\w\s]/g, " ");
+      return tokens.every((token) => haystack.includes(token));
+    });
 }
 
 /* -------------------------------------------------------------------------- */
