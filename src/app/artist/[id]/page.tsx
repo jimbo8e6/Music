@@ -13,6 +13,8 @@ import {
   type AlbumSearchResult,
   type ReleaseSection,
 } from "@/lib/musicbrainz";
+import { eq } from "drizzle-orm";
+import { db, ready, schema } from "@/db";
 import {
   DeezerError,
   getDeezerAlbum,
@@ -93,25 +95,58 @@ function deezerSectionOf(album: DeezerAlbumResult): DeezerSection {
 }
 
 async function DeezerDiscography({ artistId, artistName }: { artistId: string; artistName: string }) {
-  let albums;
+  // Fetch from Deezer API.
+  let deezerError: string | null = null;
+  let albums: DeezerAlbumResult[] = [];
   try {
     albums = await getDeezerArtistAlbums(artistId, artistName);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return (
-      <div
-        role="alert"
-        className="surface border-red-500/30 bg-red-500/5 px-6 py-10 text-center"
-      >
-        <p className="text-sm text-red-300">
-          Couldn&apos;t load albums right now. Try refreshing the page.
-        </p>
-        <p className="text-mist-500 mt-2 font-mono text-xs">{message}</p>
-      </div>
-    );
+    deezerError = err instanceof Error ? err.message : String(err);
+  }
+
+  // Merge in any albums already cached locally for this artist. Deezer sometimes
+  // omits older releases from the artist/albums API even though the album page works.
+  try {
+    await ready();
+    const localRows = await db
+      .select()
+      .from(schema.albums)
+      .where(eq(schema.albums.artistSpotifyId, artistId));
+
+    const seenIds = new Set(albums.map((a) => a.deezerId));
+    for (const row of localRows) {
+      if (!seenIds.has(row.id)) {
+        albums.push({
+          deezerId: row.id,
+          title: row.title,
+          artistName: row.artistName,
+          artistDeezerId: artistId,
+          year: row.year,
+          releaseDate: row.releaseDate,
+          artworkUrl: row.coverArtUrl ?? null,
+          albumType: row.primaryType?.toLowerCase() ?? "album",
+          totalTracks: row.trackCount ?? 0,
+        });
+      }
+    }
+  } catch {
+    // Non-fatal — Deezer API results are still shown.
   }
 
   if (albums.length === 0) {
+    if (deezerError) {
+      return (
+        <div
+          role="alert"
+          className="surface border-red-500/30 bg-red-500/5 px-6 py-10 text-center"
+        >
+          <p className="text-sm text-red-300">
+            Couldn&apos;t load albums right now. Try refreshing the page.
+          </p>
+          <p className="text-mist-500 mt-2 font-mono text-xs">{deezerError}</p>
+        </div>
+      );
+    }
     return (
       <p className="text-mist-400 text-sm">No releases found for this artist.</p>
     );
