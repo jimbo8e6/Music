@@ -14,7 +14,7 @@ import {
   type ReleaseSection,
 } from "@/lib/musicbrainz";
 import { eq } from "drizzle-orm";
-import { db, ready, schema } from "@/db";
+import { db, schema } from "@/db";
 import {
   DeezerError,
   getDeezerAlbum,
@@ -107,7 +107,6 @@ async function DeezerDiscography({ artistId, artistName }: { artistId: string; a
   // Merge in any albums already cached locally for this artist. Deezer sometimes
   // omits older releases from the artist/albums API even though the album page works.
   try {
-    await ready();
     const localRows = await db
       .select()
       .from(schema.albums)
