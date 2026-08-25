@@ -930,8 +930,8 @@ export async function getArtistReleaseGroups(
     },
     { cacheMs: CACHE_MS.lookup },
   );
-  groups = data["release-groups"] ?? [];
-  total = data["release-group-count"] ?? groups.length;
+  const groups = data["release-groups"] ?? [];
+  const total = data["release-group-count"] ?? groups.length;
 
   return {
     releaseGroups: groups
