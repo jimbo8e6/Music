@@ -210,7 +210,7 @@ export async function searchDeezerAlbums(
   if (!query.trim()) return [];
   const data = await deezerFetch<{ data: RawDeezerAlbum[] }>(
     "/search/album",
-    { q: query.trim(), limit: String(limit) },
+    { q: query.trim(), limit: String(limit), strict: "on" },
   );
   return (data.data ?? [])
     .map((a) => toAlbumResult(a))
