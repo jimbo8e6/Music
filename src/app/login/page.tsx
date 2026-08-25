@@ -25,7 +25,7 @@ export default async function LoginPage({
           <LoginForm />
         </div>
         <div className="mt-4 flex items-center justify-between text-sm text-mist-400">
-          <Link href="/forgot-password" className="hover:text-mist-200 transition-colors">
+          <Link href="/forgot-password" className="text-accent-400 hover:text-accent-300 transition-colors">
             Forgot password?
           </Link>
           <span>
