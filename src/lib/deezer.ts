@@ -291,7 +291,7 @@ export async function getDeezerArtistAlbums(
   let grandTotal = Infinity;
 
   for (;;) {
-    const params: Record<string, string> = { limit: "100" };
+    const params: Record<string, string> = { limit: "25" };
     if (index > 0) params.index = String(index);
 
     let page: { data: RawDeezerAlbum[]; total: number; next?: string };
