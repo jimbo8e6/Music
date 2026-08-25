@@ -915,33 +915,23 @@ export async function getArtistReleaseGroups(
   mbid: string,
   { limit = 100, offset = 0 }: { limit?: number; offset?: number } = {},
 ): Promise<Discography> {
-  let groups: MBReleaseGroup[];
-  let total: number;
-
-  // The artist lookup usually carries these already; only pay for a second
-  // request when it didn't, or when paging past what it returned.
-  const fromLookup = offset === 0 ? (await lookupArtistWithReleases(mbid)).releaseGroups : null;
-
-  if (fromLookup && fromLookup.length > 0) {
-    groups = fromLookup;
-    total = fromLookup.length;
-  } else {
-    const data = await mbFetch<{
-      "release-groups"?: MBReleaseGroup[];
-      "release-group-count"?: number;
-    }>(
-      "/release-group",
-      {
-        artist: mbid,
-        inc: "artist-credits",
-        limit: String(limit),
-        offset: String(offset),
-      },
-      { cacheMs: CACHE_MS.lookup },
-    );
-    groups = data["release-groups"] ?? [];
-    total = data["release-group-count"] ?? groups.length;
-  }
+  // Always use the browse API — the artist lookup endpoint caps release-groups
+  // at 25, which silently truncates prolific artists' back catalogues.
+  const data = await mbFetch<{
+    "release-groups"?: MBReleaseGroup[];
+    "release-group-count"?: number;
+  }>(
+    "/release-group",
+    {
+      artist: mbid,
+      inc: "artist-credits",
+      limit: String(limit),
+      offset: String(offset),
+    },
+    { cacheMs: CACHE_MS.lookup },
+  );
+  groups = data["release-groups"] ?? [];
+  total = data["release-group-count"] ?? groups.length;
 
   return {
     releaseGroups: groups
