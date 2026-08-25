@@ -13,8 +13,6 @@ import {
   type AlbumSearchResult,
   type ReleaseSection,
 } from "@/lib/musicbrainz";
-import { eq } from "drizzle-orm";
-import { db, schema } from "@/db";
 import {
   DeezerError,
   getDeezerAlbum,
@@ -95,41 +93,41 @@ function deezerSectionOf(album: DeezerAlbumResult): DeezerSection {
 }
 
 async function DeezerDiscography({ artistId, artistName }: { artistId: string; artistName: string }) {
-  // Fetch from Deezer API.
+  // Fetch from Deezer and local DB in parallel.
   let deezerError: string | null = null;
-  let albums: DeezerAlbumResult[] = [];
-  try {
-    albums = await getDeezerArtistAlbums(artistId, artistName);
-  } catch (err) {
-    deezerError = err instanceof Error ? err.message : String(err);
-  }
-
-  // Merge in any albums already cached locally for this artist. Deezer sometimes
-  // omits older releases from the artist/albums API even though the album page works.
-  try {
-    const localRows = await db
-      .select()
-      .from(schema.albums)
-      .where(eq(schema.albums.artistSpotifyId, artistId));
-
-    const seenIds = new Set(albums.map((a) => a.deezerId));
-    for (const row of localRows) {
-      if (!seenIds.has(row.id)) {
-        albums.push({
-          deezerId: row.id,
-          title: row.title,
-          artistName: row.artistName,
-          artistDeezerId: artistId,
-          year: row.year,
-          releaseDate: row.releaseDate,
-          artworkUrl: row.coverArtUrl ?? null,
-          albumType: row.primaryType?.toLowerCase() ?? "album",
-          totalTracks: row.trackCount ?? 0,
-        });
+  const [deezerAlbums, localRows] = await Promise.all([
+    getDeezerArtistAlbums(artistId, artistName).catch((err: unknown) => {
+      deezerError = err instanceof Error ? err.message : String(err);
+      return [] as DeezerAlbumResult[];
+    }),
+    (async () => {
+      try {
+        const { db, schema } = await import("@/db");
+        const { eq } = await import("drizzle-orm");
+        return db.select().from(schema.albums).where(eq(schema.albums.artistSpotifyId, artistId));
+      } catch {
+        return [];
       }
+    })(),
+  ]);
+
+  // Merge locally-cached albums that Deezer's API omitted.
+  const seenIds = new Set(deezerAlbums.map((a) => a.deezerId));
+  const albums: DeezerAlbumResult[] = [...deezerAlbums];
+  for (const row of localRows) {
+    if (!seenIds.has(row.id)) {
+      albums.push({
+        deezerId: row.id,
+        title: row.title,
+        artistName: row.artistName,
+        artistDeezerId: artistId,
+        year: row.year,
+        releaseDate: row.releaseDate,
+        artworkUrl: row.coverArtUrl ?? null,
+        albumType: row.primaryType?.toLowerCase() ?? "album",
+        totalTracks: row.trackCount ?? 0,
+      });
     }
-  } catch {
-    // Non-fatal — Deezer API results are still shown.
   }
 
   if (albums.length === 0) {
