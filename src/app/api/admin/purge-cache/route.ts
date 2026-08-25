@@ -11,10 +11,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const pattern = req.nextUrl.searchParams.get("pattern");
-  if (!pattern) {
-    return NextResponse.json({ error: "Missing pattern query param" }, { status: 400 });
+  // Takes a URL prefix (no leading wildcard) so the primary-key index is used.
+  // e.g. prefix=deezer:https://api.deezer.com/artist/169
+  const prefix = req.nextUrl.searchParams.get("prefix");
+  if (!prefix) {
+    return NextResponse.json({ error: "Missing prefix query param" }, { status: 400 });
   }
+
+  const pattern = prefix + "%";
 
   await ready();
 
@@ -23,5 +27,5 @@ export async function GET(req: NextRequest) {
   );
   await db.run(sql`DELETE FROM mb_cache WHERE url LIKE ${pattern}`);
 
-  return NextResponse.json({ deleted: before?.count ?? 0 });
+  return NextResponse.json({ deleted: before?.count ?? 0, prefix });
 }
